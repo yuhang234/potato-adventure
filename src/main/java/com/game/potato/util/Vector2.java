@@ -101,6 +101,20 @@ public class Vector2 {
     }
     
     /**
+     * 获取X坐标
+     */
+    public double getX() {
+        return x;
+    }
+    
+    /**
+     * 获取Y坐标
+     */
+    public double getY() {
+        return y;
+    }
+    
+    /**
      * 设置向量值
      */
     public void set(double x, double y) {

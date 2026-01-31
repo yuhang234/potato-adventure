@@ -2,6 +2,7 @@ package com.game.potato.world;
 
 import javafx.scene.canvas.GraphicsContext;
 import com.game.potato.graphics.TileGraphics;
+import com.game.potato.util.Vector2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
