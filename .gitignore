@@ -6,8 +6,6 @@ pom.xml.versionsBackup
 pom.xml.next
 release.properties
 dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
 
 # IntelliJ IDEA
 .idea/
@@ -22,22 +20,23 @@ out/
 .settings/
 bin/
 
-# VS Code
-.vscode/
-
-# Java
-*.class
-*.jar
-*.war
-*.ear
-*.log
-hs_err_pid*
-
-# Game Data
-saves/
-*.db
-*.db-journal
+# NetBeans
+nbproject/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Java
+*.class
+*.log
+*.jar
+!lib/*.jar
+
+# Game Data
+saves/
+*.db
