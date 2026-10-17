@@ -46,10 +46,18 @@ usable_jdk() {
     [ "$major" -ge "$MIN_JAVA_MAJOR" ] 2>/dev/null
 }
 
+# 已知可用的完整 JDK 21（本机验收环境实测：Liberica 21 + 内置 JavaFX）
+KNOWN_GOOD_JDK="/home/Yuhang/.sdkman/candidates/java/21.0.12-fx+1.1-librca"
+
 # 依次尝试若干候选目录，第一个可用者即为 JAVA_HOME
 find_jdk() {
     local candidates=()
     local dir
+
+    # 0) 已知可用 JDK（优先，避免选中只带 JRE 的 /usr/lib/jvm/java-21-openjdk-amd64）
+    candidates+=("$KNOWN_GOOD_JDK")
+    [ -d "$HOME/.sdkman/candidates/java/current" ] && \
+        candidates+=("$HOME/.sdkman/candidates/java/current")
 
     # 1) 已显式导出的 JAVA_HOME
     [ -n "${JAVA_HOME:-}" ] && candidates+=("$JAVA_HOME")
@@ -93,13 +101,18 @@ JDK_HOME="$(find_jdk)"
 if [ -z "${JDK_HOME:-}" ]; then
     echo "[错误] 没有找到可用的 JDK ${MIN_JAVA_MAJOR}+（只带运行时的 JRE 不能编译本项目）"
     echo ""
+    echo "要求：目录下必须存在 bin/javac，且 bin/java -version 报告 ${MIN_JAVA_MAJOR} 或更高。"
+    echo "注意：/usr/lib/jvm/java-21-openjdk-amd64 常常是 JRE-only（没有 javac），"
+    echo "      选中它会报 “release version 21 not supported”，本脚本会自动跳过它。"
+    echo ""
     echo "安装建议："
     echo "  Ubuntu/Debian: sudo apt install openjdk-21-jdk"
     echo "  macOS:         brew install openjdk@21"
     echo "  任意平台:      https://adoptium.net/temurin/releases/?version=21"
+    echo "  本机已验证:    $KNOWN_GOOD_JDK"
     echo ""
     echo "提示：已安装但仍报错时，请显式指定 JAVA_HOME，例如"
-    echo "  JAVA_HOME=/path/to/jdk-21 ./run.sh"
+    echo "  JAVA_HOME=$KNOWN_GOOD_JDK ./run.sh"
     exit 1
 fi
 export JAVA_HOME="$JDK_HOME"

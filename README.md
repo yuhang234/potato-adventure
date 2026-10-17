@@ -24,6 +24,16 @@
 
 1. **Java开发工具包 (JDK)**
    - **版本**: **JDK 21 或更高版本**（必须是完整 JDK，带 `javac`；只装 JRE 无法编译）
+   - **关键坑**: `/usr/lib/jvm/java-21-openjdk-amd64` 这类目录**可能只有 JRE、没有 `bin/javac`**，
+     选中它会报 `release version 21 not supported`。判断方法：
+     ```bash
+     ls /path/to/jdk/bin/javac && /path/to/jdk/bin/java -version
+     ```
+   - **本机已验证可用（完整 JDK 21，自带 JavaFX）**：
+     ```bash
+     /home/Yuhang/.sdkman/candidates/java/21.0.12-fx+1.1-librca
+     # 等价用法：JAVA_HOME=/home/Yuhang/.sdkman/candidates/java/21.0.12-fx+1.1-librca ./run.sh
+     ```
    - **下载地址**:
      - Eclipse Temurin 21: https://adoptium.net/temurin/releases/?version=21
      - 任意发行版均可（Temurin / Liberica / Zulu / Oracle / 各 Linux 发行版仓库）
@@ -164,8 +174,11 @@ mvn -version
 run.bat
 ```
 
-脚本会自动定位可用的 JDK 21（跳过只有 JRE 的目录）、导出 `JAVA_HOME`，然后执行
-`mvn -q clean compile javafx:run` 启动游戏。也可以手动执行等价命令：
+脚本会自动定位可用的 JDK 21（按 `已知可用 JDK → SDKMAN current → $JAVA_HOME → PATH → SDKMAN → /usr/lib/jvm`
+的顺序尝试，逐个校验 `bin/javac` 存在且 `java -version` 报告 21+，自动跳过只有 JRE 的目录），
+导出 `JAVA_HOME`，然后执行 `mvn -q clean compile javafx:run` 启动游戏。
+如果一个可用的 JDK 都没找到，脚本会打印明确的修复指引并退出（不会带着错误的 JDK 硬跑）。
+也可以手动执行等价命令：
 
 ```bash
 mvn clean compile javafx:run
@@ -371,6 +384,10 @@ sudo apt install openjdk-21-jdk
 ./run.sh
 ```
 `run.sh` 会遍历 `JAVA_HOME`、PATH、SDKMAN、`/usr/lib/jvm` 等位置，自动跳过只有 JRE 的目录。
+本机已验证可用的 JDK：
+```bash
+JAVA_HOME=/home/Yuhang/.sdkman/candidates/java/21.0.12-fx+1.1-librca ./run.sh
+```
 
 ### 问题 4: SQLite 数据库错误
 
