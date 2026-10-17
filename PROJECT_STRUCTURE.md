@@ -9,8 +9,8 @@ potatoadven/
 │
 ├── 📄 pom.xml                          # Maven项目配置文件
 │   ├── 项目信息（groupId, artifactId, version）
-│   ├── Java 8编译配置
-│   ├── 依赖管理（SQLite JDBC 3.45.0.0）
+│   ├── Java 21 + OpenJFX 21 编译配置
+│   ├── 依赖管理（JavaFX 21 / SQLite JDBC / SLF4J / JUnit 5）
 │   └── 打包插件配置（Assembly Plugin）
 │
 ├── 📄 .gitignore                       # Git版本控制忽略配置
@@ -77,72 +77,49 @@ potatoadven/
 │           └── 📁 com/
 │               └── 📁 potatoadventure/
 │                   │
-│                   ├── 📄 Main.java    # 主程序入口（58行）
-│                   │   ├── JavaFX Application入口
-│                   │   ├── 窗口初始化
-│                   │   └── 游戏引擎启动
+│                   ├── 📄 Main.java      # 主程序入口（57行）
 │                   │
-│                   ├── 📁 core/        # 核心引擎包
-│                   │   └── 📄 GameEngine.java  # 游戏引擎（365行）
-│                   │       ├── 游戏循环（AnimationTimer）
-│                   │       ├── 渲染系统（GraphicsContext）
-│                   │       ├── 状态管理（State Machine）
-│                   │       ├── 更新逻辑（移动/碰撞/战斗）
-│                   │       └── UI渲染（HUD/战斗界面/暂停）
+│                   ├── 📁 core/          # 核心引擎包
+│                   │   ├── 📄 Camera.java         # 平滑滚屏摄像机（158行）
+│                   │   ├── 📄 GameEngine.java     # 游戏引擎（1161行）
+│                   │   ├── 📄 GameState.java      # 游戏状态枚举（26行）
+│                   │   └── 📄 RetreatPlanner.java # 逃跑落点规划（101行）
 │                   │
-│                   ├── 📁 model/       # 数据模型包
-│                   │   │
-│                   │   ├── 📄 Player.java      # 玩家模型（213行）
-│                   │   │   ├── 基础属性（HP/MP/攻击/防御）
-│                   │   │   ├── 移动系统
-│                   │   │   ├── 成长系统（经验/升级）
-│                   │   │   ├── 战斗方法（受伤/治疗）
-│                   │   │   └── 图形渲染（土豆造型）
-│                   │   │
-│                   │   ├── 📄 Enemy.java       # 敌人模型（188行）
-│                   │   │   ├── 3种敌人类型（史莱姆/哥布林/野狼）
-│                   │   │   ├── 属性系统（HP/攻击/防御/奖励）
-│                   │   │   ├── 战斗方法（受伤/死亡）
-│                   │   │   └── 图形渲染（不同形态）
-│                   │   │
-│                   │   └── 📄 GameMap.java     # 地图模型（153行）
-│                   │       ├── 地图数据（40×30格子）
-│                   │       ├── 4种地形（草地/墙/树/水）
-│                   │       ├── 地图生成（随机分布）
-│                   │       ├── 碰撞检测
-│                   │       └── 地形渲染（纹理生成）
+│                   ├── 📁 model/         # 数据模型包
+│                   │   ├── 📄 Enemy.java           # 敌人模型（232行）
+│                   │   ├── 📄 GameMap.java         # 地图模型：60×45格（614行）
+│                   │   └── 📄 Player.java          # 玩家模型（393行）
 │                   │
-│                   ├── 📁 service/     # 业务服务包
-│                   │   │
-│                   │   ├── 📄 BattleService.java   # 战斗服务（153行）
-│                   │   │   ├── 战斗流程管理
-│                   │   │   ├── 普通攻击（伤害计算）
-│                   │   │   ├── 技能系统（3个技能）
-│                   │   │   ├── 暴击/闪避系统
-│                   │   │   └── 战斗结算
-│                   │   │
-│                   │   └── 📄 SaveLoadService.java # 存档服务（253行）
-│                   │       ├── SQLite数据库初始化
-│                   │       ├── 表结构创建（player/enemy）
-│                   │       ├── 保存游戏（事务管理）
-│                   │       ├── 加载游戏（数据恢复）
-│                   │       └── 错误处理
+│                   ├── 📁 service/       # 业务服务包
+│                   │   ├── 📄 BattleService.java   # 战斗服务（294行）
+│                   │   └── 📄 SaveLoadService.java # 存档/读档服务（404行）
 │                   │
-│                   └── 📁 util/        # 工具类包
-│                       └── 📄 InputHandler.java    # 输入处理（50行）
-│                           ├── 键盘事件监听
-│                           ├── 持续按键检测
-│                           └── 单次按键检测
+│                   ├── 📁 ui/            # 界面包
+│                   │   ├── 📄 Assets.java           # 美术资产加载入口（236行）
+│                   │   ├── 📄 BattleScreen.java     # 战斗界面（287行）
+│                   │   ├── 📄 CharSelectScreen.java # 角色创建界面（317行）
+│                   │   ├── 📄 OverworldScreen.java  # 大地图探索 HUD（359行）
+│                   │   ├── 📄 Palette.java          # 调色板常量（81行）
+│                   │   ├── 📄 ResultScreens.java    # 结算/战败界面（159行）
+│                   │   ├── 📄 Sprites.java          # 实体精灵绘制（106行）
+│                   │   ├── 📄 TitleScreen.java      # 主菜单（92行）
+│                   │   ├── 📄 UiKit.java            # 像素 UI 工具箱（286行）
+│                   │   └── 📄 WeatherParticles.java # 环境粒子层（144行）
+│                   │
+│                   └── 📁 util/          # 工具类包
+│                       └── 📄 InputHandler.java      # 输入处理/按键缓冲（130行）
 │
 ├── 📁 target/                          # Maven编译输出（自动生成）
 │   ├── classes/                        # 编译后的.class文件
 │   ├── maven-archiver/                 # Maven打包信息
-│   └── potato-adventure-1.0.0-jar-with-dependencies.jar  # 可执行JAR
+│   └── potato-adventure-2.0.0-M1-jar-with-dependencies.jar  # 可执行JAR
 │
 └── 📁 saves/                           # 存档目录（自动生成）
     └── save.db                         # SQLite存档数据库
         ├── player表（玩家数据）
-        └── enemy表（敌人数据）
+        ├── enemy表（敌人数据）
+        ├── map_meta表（地图元信息）
+        └── map_tile表（全部地块）
 ```
 
 ---
@@ -153,15 +130,28 @@ potatoadven/
 
 | 文件 | 路径 | 行数 | 类型 | 说明 |
 |------|------|------|------|------|
-| Main.java | com.potatoadventure | 58 | 入口 | 程序主入口 |
-| GameEngine.java | core | 365 | 核心 | 游戏引擎 |
-| Player.java | model | 213 | 模型 | 玩家角色 |
-| Enemy.java | model | 188 | 模型 | 敌人系统 |
-| GameMap.java | model | 153 | 模型 | 地图系统 |
-| BattleService.java | service | 153 | 服务 | 战斗逻辑 |
-| SaveLoadService.java | service | 253 | 服务 | 存档系统 |
-| InputHandler.java | util | 50 | 工具 | 输入处理 |
-| **总计** | - | **1,433** | - | - |
+| Main.java | com.potatoadventure | 57 | 入口 | 程序主入口 |
+| Camera.java | core | 158 | 核心 | 平滑滚屏摄像机 |
+| GameEngine.java | core | 1161 | 核心 | 游戏引擎 |
+| GameState.java | core | 26 | 核心 | 游戏状态枚举 |
+| RetreatPlanner.java | core | 101 | 核心 | 逃跑落点规划 |
+| Enemy.java | model | 232 | 模型 | 敌人系统 |
+| GameMap.java | model | 614 | 模型 | 地图系统（60×45） |
+| Player.java | model | 393 | 模型 | 玩家角色 |
+| BattleService.java | service | 294 | 服务 | 战斗逻辑 |
+| SaveLoadService.java | service | 404 | 服务 | 存档系统 |
+| Assets.java | ui | 236 | 界面 | 美术资产加载入口 |
+| BattleScreen.java | ui | 287 | 界面 | 战斗界面 |
+| CharSelectScreen.java | ui | 317 | 界面 | 角色创建界面 |
+| OverworldScreen.java | ui | 359 | 界面 | 大地图探索 HUD |
+| Palette.java | ui | 81 | 界面 | 调色板常量 |
+| ResultScreens.java | ui | 159 | 界面 | 结算/战败界面 |
+| Sprites.java | ui | 106 | 界面 | 实体精灵绘制 |
+| TitleScreen.java | ui | 92 | 界面 | 主菜单 |
+| UiKit.java | ui | 286 | 界面 | 像素 UI 工具箱 |
+| WeatherParticles.java | ui | 144 | 界面 | 环境粒子层 |
+| InputHandler.java | util | 130 | 工具 | 输入处理 |
+| **总计** | - | **5,637** | - | - |
 
 ### 文档统计
 
@@ -178,12 +168,12 @@ potatoadven/
 
 | 功能模块 | 数量 | 说明 |
 |----------|------|------|
-| 游戏状态 | 5种 | 菜单/游戏中/战斗/暂停/结束 |
+| 游戏状态 | 7种 | 菜单/选角/游戏中/暂停/战斗/胜利/结束 |
 | 敌人类型 | 3种 | 史莱姆/哥布林/野狼 |
 | 战斗技能 | 3个 | 火球术/治疗术/冰冻术 |
 | 地形类型 | 4种 | 草地/墙壁/树木/水域 |
 | 操作按键 | 12个 | WASD/空格/数字/功能键 |
-| 数据库表 | 2个 | player/enemy |
+| 数据库表 | 4个 | player/enemy/map_meta/map_tile |
 
 ---
 
@@ -228,9 +218,14 @@ potatoadven/
 ## 📦 Maven依赖树
 
 ```
-potato-adventure (com.potatoadventure:potato-adventure:jar:1.0.0)
-└── org.xerial:sqlite-jdbc:jar:3.45.0.0:compile
-    └── org.slf4j:slf4j-api:jar:1.7.36:compile (optional)
+potato-adventure (com.potatoadventure:potato-adventure:jar:2.0.0-M1)
+├── org.openjfx:javafx-controls:jar:21.0.2
+├── org.openjfx:javafx-graphics:jar:21.0.2
+├── org.openjfx:javafx-media:jar:21.0.2
+├── org.xerial:sqlite-jdbc:jar:3.45.1.0
+├── org.slf4j:slf4j-api:jar:2.0.12
+├── org.slf4j:slf4j-simple:jar:2.0.12 (runtime)
+└── org.junit.jupiter:junit-jupiter:jar:5.10.2 (test)
 ```
 
 ---
@@ -323,6 +318,30 @@ CREATE TABLE enemy (
     defense INTEGER NOT NULL,              -- 防御力
     exp_reward INTEGER NOT NULL,           -- 经验奖励
     is_alive INTEGER NOT NULL              -- 是否存活（0/1）
+);
+```
+
+### map_meta表结构
+
+```sql
+CREATE TABLE map_meta (
+    save_id INTEGER PRIMARY KEY,           -- 关联的存档ID
+    width INTEGER NOT NULL,                -- 地图宽度（格）
+    height INTEGER NOT NULL,               -- 地图高度（格）
+    seed INTEGER NOT NULL,                 -- 地图随机种子
+    tile_count INTEGER NOT NULL            -- 地块总数
+);
+```
+
+### map_tile表结构
+
+```sql
+CREATE TABLE map_tile (
+    save_id INTEGER NOT NULL,              -- 关联的存档ID
+    x INTEGER NOT NULL,                    -- 地块X坐标
+    y INTEGER NOT NULL,                    -- 地块Y坐标
+    tile INTEGER NOT NULL,                 -- 地块类型
+    PRIMARY KEY (save_id, x, y)            -- 复合主键
 );
 ```
 

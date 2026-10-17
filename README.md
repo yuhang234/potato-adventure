@@ -348,7 +348,7 @@ potatoadven/
 │   │                   └── InputHandler.java       # 输入处理（有序缓冲）
 │   └── test/
 │       └── java/com/potatoadventure/       # JUnit 5 单元测试（73 个用例）
-│           ├── core/     CameraTest / RetreatPlannerTest
+│           ├── core/     CameraTest / GameEngineRegressionTest / RetreatPlannerTest
 │           ├── model/    GameMapTest / PlayerMovementTest
 │           ├── service/  BattleServiceTest / SaveLoadServiceTest
 │           └── util/     InputHandlerTest
