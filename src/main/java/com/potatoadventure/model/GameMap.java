@@ -464,7 +464,7 @@ public class GameMap {
             }
         }
 
-        // 第 2 遍：草地纹理（暗色土斑 + 亮色草叶），位置由构造期烘焙的 detail 决定
+        // 第 2 遍：草地纹理（暗色土斑 + 亮色草叶 + 小花点缀），位置由构造期烘焙的 detail 决定
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
                 if (tiles[x][y] != TILE_GRASS) {
@@ -475,17 +475,27 @@ public class GameMap {
                 int d = detail[x][y];
 
                 gc.setFill(Palette.GRASS_DARK);
-                for (int i = 0; i < 2; i++) {
-                    int bits = (d >>> (1 + i * 7)) & 0x7F;
-                    gc.fillRect(px + 2 + bits % 28, py + 3 + (bits / 28) % 27, 2, 1);
+                for (int i = 0; i < 3; i++) {
+                    int bits = (d >>> (1 + i * 6)) & 0x3F;
+                    gc.fillRect(px + 1 + bits % 30, py + 2 + (bits / 30) % 28, 2, 1);
                 }
 
                 gc.setFill(Palette.GRASS_BLADE);
-                for (int i = 0; i < 3; i++) {
-                    int bits = (d >>> (2 + i * 10)) & 0x3FF;
-                    int bx = 3 + (bits % 26);
-                    int by = 3 + ((bits / 26) % 24);
+                for (int i = 0; i < 5; i++) {
+                    int bits = (d >>> (2 + i * 6)) & 0x3F;
+                    int bx = 2 + (bits % 29);
+                    int by = 3 + ((bits / 29) % 25);
                     gc.fillRect(px + bx, py + by, 1, 3);
+                }
+
+                // 每格约 1/4 概率一丛小花（原型 bg_village.png 的 #F0CC81 点缀）
+                if (((d >>> 28) & 3) == 0) {
+                    int fx = px + 4 + ((d >>> 8) & 0x17) % 24;
+                    int fy = py + 5 + ((d >>> 16) & 0x17) % 22;
+                    gc.setFill(Palette.GRASS_FLOWER);
+                    gc.fillRect(fx, fy, 1, 1);
+                    gc.fillRect(fx + 2, fy, 1, 1);
+                    gc.fillRect(fx + 1, fy + 1, 1, 1);
                 }
             }
         }

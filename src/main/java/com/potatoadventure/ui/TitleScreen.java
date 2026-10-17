@@ -84,7 +84,7 @@ public final class TitleScreen {
             }
         }
 
-        UiKit.text(gc, "v2.0.0-M1 | 引擎：Java 21 + JavaFX 21 | 视觉规范：design/ui-prototype",
+        UiKit.text(gc, "v2.0.0-M1 | 引擎：Java 21 + JavaFX 21 | 像素美术：原创程序化生成",
                 20, Assets.DESIGN_HEIGHT - 15, Color.web("#8FA0AD"), 13, Palette.TEXT_SHADOW, true);
         UiKit.textCenter(gc, "[↑↓ / W S] 选择    [Enter / 空格] 确认    [鼠标] 直接点击",
                 Assets.DESIGN_WIDTH - 220, Assets.DESIGN_HEIGHT - 15, Color.web("#D6A848"), 13);

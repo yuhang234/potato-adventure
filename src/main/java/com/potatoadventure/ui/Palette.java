@@ -42,26 +42,28 @@ public final class Palette {
     public static final Color TEXT_SHADOW = Color.web("#101518");
 
     // ---- 环境与自然地貌 ----
-    /** 青苔草地基底。 */
-    public static final Color GRASS_BASE = Color.web("#557A46");
-    /** 草地暗阶 [派生]。 */
-    public static final Color GRASS_DARK = Color.web("#4A6B3D");
-    /** 草地亮阶 [派生]。 */
-    public static final Color GRASS_LIGHT = Color.web("#628A52");
+    /** 青苔草地基底（取自原型 {@code bg_village.png} 的主色 #50A028）。 */
+    public static final Color GRASS_BASE = Color.web("#50A028");
+    /** 草地暗阶（原型 {@code bg_village.png} 阴影草色 #325F41）。 */
+    public static final Color GRASS_DARK = Color.web("#3E6B33");
+    /** 草地亮阶（原型 {@code bg_village.png} 受光草色 #73C832）。 */
+    public static final Color GRASS_LIGHT = Color.web("#73C832");
     /** 草叶高光 [派生]。 */
-    public static final Color GRASS_BLADE = Color.web("#7A9E60");
-    /** 幽暗灌木绿（树冠）。 */
-    public static final Color BUSH = Color.web("#385E38");
-    /** 树冠受光面 [派生]。 */
-    public static final Color BUSH_LIGHT = Color.web("#47714A");
+    public static final Color GRASS_BLADE = Color.web("#A5E85C");
+    /** 草地小花 / 落叶点缀（原型金 #F0CC81 与黄 #FFD246）。 */
+    public static final Color GRASS_FLOWER = Color.web("#F0CC81");
+    /** 幽暗灌木绿（树冠，原型 {@code bg_mist_forest.png} #28553C）。 */
+    public static final Color BUSH = Color.web("#28553C");
+    /** 树冠受光面（原型 {@code bg_mist_forest.png} #46965A）。 */
+    public static final Color BUSH_LIGHT = Color.web("#46965A");
     /** 湿润泥土 / 树干。 */
     public static final Color TRUNK = Color.web("#80583A");
     /** 树干暗部 [派生]。 */
     public static final Color TRUNK_DARK = Color.web("#5E3F2A");
-    /** 地牢石壁暗灰（墙体基色）。 */
-    public static final Color STONE = Color.web("#34495E");
-    /** 石壁暗槽 / 交界阴影。 */
-    public static final Color STONE_DARK = Color.web("#1E232D");
+    /** 地牢石壁暗灰（墙体基色，取自原型 {@code bg_dungeon.png} #263044）。 */
+    public static final Color STONE = Color.web("#263044");
+    /** 石壁暗槽 / 交界阴影（原型 {@code bg_dungeon.png} #161C28）。 */
+    public static final Color STONE_DARK = Color.web("#161C28");
     /** 石壁受光倒角（原型 ui/stone_slate.png 高光色）。 */
     public static final Color STONE_LIGHT = Color.web("#788796");
     /** 水面基色（与 MP 海蓝同源）。 */
