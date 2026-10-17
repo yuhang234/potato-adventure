@@ -2,7 +2,7 @@
 
 > **M1 更新（2026-10-17）**：技术栈与启动方式已更新为 **Java 21 + OpenJFX 21（Maven 依赖）**，
 > 启动命令为 `mvn clean compile javafx:run`（或 `./run.sh` / `run.bat`）。本文档是 v1.0 交付时的快照，
-> 最新说明请以 [README.md](README.md) 为准。
+> 最新说明请以 [README.md](README.md) 和 [Docs/M1_引擎重构说明.md](Docs/M1_引擎重构说明.md) 为准。
 
 ## 🎯 项目交付概览
 
