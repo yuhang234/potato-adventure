@@ -32,10 +32,10 @@ echo 打包成功！
 echo ========================================
 echo.
 echo 可执行文件位置：
-echo target\potato-adventure-1.0.0-jar-with-dependencies.jar
+echo target\potato-adventure-2.0.0-M1-jar-with-dependencies.jar
 echo.
 echo 运行方法：
-echo java -jar target\potato-adventure-1.0.0-jar-with-dependencies.jar
+echo java -jar target\potato-adventure-2.0.0-M1-jar-with-dependencies.jar
 echo.
 
 pause
