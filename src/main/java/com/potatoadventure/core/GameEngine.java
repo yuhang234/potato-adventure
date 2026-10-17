@@ -163,6 +163,7 @@ public class GameEngine {
     // ---- 统计（结算界面用，全部是真实累计值） ----
     private int kills;
     private int adventureSeconds;
+    private double adventureSecondsAccumulator;
     private int battleActions;
 
     /** 战斗实况日志（战斗界面右下羊皮纸窗口）。 */
@@ -346,6 +347,7 @@ public class GameEngine {
         battleLog.clear();
         kills = 0;
         adventureSeconds = 0;
+        adventureSecondsAccumulator = 0;
         battleActions = 0;
 
         System.out.printf("新地图: %dx%d seed=0x%X hash=0x%X 玩家出生=(%d,%d) 敌人=%s%n",
@@ -545,10 +547,8 @@ public class GameEngine {
     // ---- 大地图 ----
 
     private void updatePlaying(double dt) {
-        adventureSeconds += (int) Math.floor(dt * (1 + adventureSeconds * 0 + 0));
-        if (adventureSeconds > 100_000_000) {
-            adventureSeconds = 0;
-        }
+        adventureSecondsAccumulator += dt;
+        adventureSeconds = (int) adventureSecondsAccumulator;
         particles.update(dt, currentBiome());
         updateMoveDirection();
 
@@ -580,10 +580,7 @@ public class GameEngine {
             notify(nearestNpcName() + "：对话系统将在 M3 交付范围接入");
         }
 
-        // 走到敌人格 → 进入战斗。只在一步走完之后判定，避免视觉上还在滑行就切场景。
-        if (player.isStepping()) {
-            return;
-        }
+        // 走到敌人格 → 进入战斗。
         for (Enemy enemy : enemies) {
             if (enemy.isAlive() && player.getX() == enemy.getX() && player.getY() == enemy.getY()) {
                 startBattle(enemy);
@@ -660,7 +657,6 @@ public class GameEngine {
         if (!enemy.isAlive()) {
             if (battleService.grantDefeatReward(player, enemy)) {
                 logBattle("· 击败 " + enemy.getName() + "，获得 " + enemy.getExpReward() + " EXP");
-                kills++;
             }
             battleService.endBattle();
             onEnemyDefeated(enemy, "战斗");
@@ -739,6 +735,7 @@ public class GameEngine {
     }
 
     private void onEnemyDefeated(Enemy enemy, String where) {
+        kills++;
         if (allEnemiesDefeated()) {
             logBattle("· 荒野上的魔物已被全部击退");
             gameState = GameState.VICTORY;
@@ -803,7 +800,7 @@ public class GameEngine {
         battleService.endBattle();
         lastOverworldTileX = player.getX();
         lastOverworldTileY = player.getY();
-        player.setName(playerName);
+        playerName = player.getName();
         battleLog.clear();
         logBattle("· 已读取存档：地图 hash=0x" + Long.toHexString(gameMap.tileHash()).toUpperCase());
         notify("已加载  map hash=0x" + Long.toHexString(gameMap.tileHash()).toUpperCase());
