@@ -1,5 +1,9 @@
 # 土豆冒险游戏 - 完整项目结构
 
+> **M1 更新（2026-10-17）**：项目已升级到 Java 21 + OpenJFX 21，并新增 `core/Camera.java`、
+> `core/GameState.java`、`core/RetreatPlanner.java`、`ui/Palette.java`、`src/test/**` 等文件；
+> 最新目录树请见 [README.md](README.md) 的“项目结构”一节。
+
 ```
 potatoadven/
 │
