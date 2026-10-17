@@ -40,7 +40,25 @@ const App = {
     this.setupEventListeners();
     this.renderRadarCharts();
     this.renderSkillTree();
-    this.switchScreen('title');
+
+    const search = window.location.search || (window.location.hash.startsWith('#') ? '?' + window.location.hash.slice(1) : '');
+    const params = new URLSearchParams(search);
+    const screen = params.get('screen') || 'title';
+    const biome = params.get('biome');
+    const modal = params.get('modal');
+    const dialogue = params.get('dialogue');
+
+    this.switchScreen(screen);
+    if (biome) {
+      this.setBiome(biome);
+    }
+    if (modal) {
+      this.openModal(modal);
+    }
+    if (dialogue) {
+      this.openDialogue(dialogue.includes('raine') ? '铁匠 雷恩' : '村长 托马斯');
+      this.skipTypewriter();
+    }
   },
 
   setupEventListeners() {

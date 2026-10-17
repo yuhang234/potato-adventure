@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Render pixel-perfect proof screenshots for Potato Adventure UI Prototype
-Generates 1280x720 screenshots for all 13 screens/states into the proof directory.
+Design-time Preview Generator for Potato Adventure UI Prototype
+Generates design-time 2D PIL mockup previews for quick visual inspection without a browser.
+Note: For genuine browser verification captures, see capture_browser_screenshots.py.
 """
 
 import os

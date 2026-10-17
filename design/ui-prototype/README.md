@@ -49,13 +49,14 @@
 
 全部 46 个 PNG 像素图集均由本工程内置的生成脚本程序化烘焙产出，代码全部开放在工程内：
 - **素材生成脚本**：`design/ui-prototype/scripts/generate_assets.py`（依赖 Pillow，执行 `python3 design/ui-prototype/scripts/generate_assets.py` 可重新生成全部素材）
-- **逐屏实景渲染脚本**：`design/ui-prototype/scripts/render_proof_screenshots.py`（执行 `python3 design/ui-prototype/scripts/render_proof_screenshots.py` 可将 13 屏高保真 1280×720 截图重绘输出至 proof 目录）
+- **真实浏览器截图捕获脚本**：`design/ui-prototype/scripts/capture_browser_screenshots.py`（驱动无头 Chromium 浏览器对全部 13 个界面状态执行 1280×720 实景截图）
+- **设计期预览生成脚本**：`design/ui-prototype/scripts/render_proof_screenshots.py`（基于 PIL 的设计期静态 2D 预览图生成脚本，仅作为设计时辅助查看，不作为浏览器真实渲染证明）
 
 ### 3.1 资产明细与生成配方清单
 
 | 分类 | 资产文件名 | 原始像素尺寸 | 放大倍数与渲染尺寸 | 配方描述与调色板基准 | 授权许可 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **字体** | `fonts/unifont.otf` | 16×16 点阵 | 矢量嵌入 | GNU Unifont 完整 Unicode 点阵字体，涵盖全部中文字符与 ASCII | **GPL-2.0+ with Font Exception / SIL OFL** |
+| **字体** | `fonts/unifont.otf` | 16×16 点阵 | 矢量嵌入 | GNU Unifont，版本 **15.1.01**（来自 Debian `fonts-unifont` 1:15.1.01-1），覆盖全套 Unicode 基本多语言平面与中文字符集 | **GNU GPL-2.0-or-later with Font Embedding Exception (Debian GPL-2+)** |
 | **UI 材质** | `ui/wood_panel.png` | 64×64 | 2x (128×128) | 泰拉瑞亚风格木板纹理：横向木纹缝隙、铁钉与受光高光 (`#A5734B`, `#7D5032`, `#371E12`) | 原创程序化 (CC0) |
 | **UI 材质** | `ui/stone_slate.png` | 64×64 | 2x (128×128) | 雕凿石板纹理：深灰石板底槽、倒角明暗线与微裂纹 (`#788796`, `#4B5A69`, `#1E232D`) | 原创程序化 (CC0) |
 | **UI 材质** | `ui/parchment.png` | 64×64 | 2x (128×128) | 古旧羊皮纸纹理：有机纤维斑驳噪点 (`#F5E6BE`, `#E6D2A5`, `#C3AA78`) | 原创程序化 (CC0) |
@@ -142,5 +143,15 @@
    - 包含键盘导航（1-0/-）、底部快速导航坞（覆盖 11 种核心视图状态）、按钮 Hover 8-Bit 声音合成、大地图三地貌漫游与小地图同步、回合制战斗完整打击循环与战斗日志追加、背包 24 格穿脱装备并实时联动角色六维数值。
 3. **分辨率适配与像素硬边缘**：
    - 在 1280×720 基准分辨率下居中对齐，使用 `image-rendering: pixelated`，无任何溢出滚动条或半像素模糊。
-4. **运行环境与截图说明**：
-   - 在纯无头（Headless）无显示服务的持续集成容器中，`chrome-devtools-axi` 无法直接调起图形界面；本原型通过内置的 `design/ui-prototype/scripts/render_proof_screenshots.py` 程序化驱动真实 1280×720 画布，复用全部像素图集与 Unifont 点阵字体，精准生成了与浏览器实际渲染完全一致的 13 屏高清截图并存放在 `proof/` 目录下。任何评审者均可直接在本地浏览器双击 `index.html` 亲身体验交互。
+4. **验证截图捕获方式与环境说明**：
+   - `proof/` 目录下的全部 13 张 1280×720 截图均为使用真实无头 Chromium 浏览器捕获的实景画面，完全呈现浏览器引擎的 CSS Flexbox 布局、点阵字体栅格化、Canvas 动态绘制及半透明遮罩效果。
+   - **浏览器二进制**：`/home/Yuhang/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome`（版本：Google Chrome for Testing 147.0.7727.15）
+   - **截图命令行**：
+     ```bash
+     /home/Yuhang/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome \
+       --headless=new --disable-gpu --no-sandbox --window-size=1280,720 \
+       --screenshot="/path/to/proof/<filename>.png" --virtual-time-budget=2000 \
+       "file:///home/Yuhang/.treehouse/potato-adventure-dd6fc2/1/potato-adventure/design/ui-prototype/index.html?<params>"
+     ```
+   - **自动化驱动脚本**：`design/ui-prototype/scripts/capture_browser_screenshots.py`，支持一键复现全部真实浏览器截图捕获。
+   - **关于设计期预览工具**：工程内同时保留了 `design/ui-prototype/scripts/render_proof_screenshots.py`，该脚本仅为在无浏览器环境下做静态设计与资产对齐的辅助工具，其 2D PIL 绘制与浏览器真实 CSS/DOM 渲染存在差异（尤其在字体换行与对话框排版上），切勿混同，一切以浏览器实际运行效果及 `capture_browser_screenshots.py` 捕获的真实截图为准。
