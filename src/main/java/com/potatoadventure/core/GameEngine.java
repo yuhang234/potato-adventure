@@ -14,6 +14,7 @@ import com.potatoadventure.ui.ResultScreens;
 import com.potatoadventure.ui.Sprites;
 import com.potatoadventure.ui.TitleScreen;
 import com.potatoadventure.ui.UiKit;
+import com.potatoadventure.ui.WeatherParticles;
 import com.potatoadventure.util.InputHandler;
 
 import javafx.animation.AnimationTimer;
@@ -115,6 +116,9 @@ public class GameEngine {
     private int moveDirY;
 
     private boolean debugOverlay;
+
+    /** 大地图环境粒子（落叶 / 孢子 / 火星），只在 PLAYING 态更新与绘制。 */
+    private final WeatherParticles particles = new WeatherParticles();
     private String banner = "";
     private double bannerTimer;
     private double fpsAccumulator;
@@ -316,6 +320,7 @@ public class GameEngine {
      */
     private void newGame() {
         gameMap = new GameMap(GameMap.DEFAULT_WIDTH, GameMap.DEFAULT_HEIGHT, System.nanoTime());
+        particles.clear();
         player = new Player(GameMap.SPAWN_TILE_X, GameMap.SPAWN_TILE_Y);
         player.setName(playerName);
         player.setHeroClass(CharSelectScreen.HeroClass.values()[classIndex].key());
@@ -544,6 +549,7 @@ public class GameEngine {
         if (adventureSeconds > 100_000_000) {
             adventureSeconds = 0;
         }
+        particles.update(dt, currentBiome());
         updateMoveDirection();
 
         int beforeX = player.getX();
@@ -791,6 +797,7 @@ public class GameEngine {
             return false;
         }
         gameMap = loaded;
+        particles.clear();
         camera = new Camera(width, height, gameMap.getPixelWidth(), gameMap.getPixelHeight());
         camera.snapTo(player.getCenterPixelX(), player.getCenterPixelY());
         battleService.endBattle();
@@ -1045,6 +1052,9 @@ public class GameEngine {
         }
         player.render(gc, camX, camY);
 
+        // 环境粒子画在实体之上、HUD 之下（与原型绘制顺序一致）
+        particles.render(gc);
+
         String npc = nearestNpcName();
         OverworldScreen.renderHud(gc, player, gameMap, enemies, areaName(),
                 banner.isEmpty() ? null : banner, npc == null ? null : "[E] 与 " + npc + " 交互");
@@ -1062,6 +1072,16 @@ public class GameEngine {
             case GameMap.TILE_TREE -> "【迷雾森林 · 土豆荒野】";
             case GameMap.TILE_WALL -> "【石壁边界 · 土豆荒野】";
             default -> "【和平原野 · 土豆村落】";
+        };
+    }
+
+    /** 按玩家脚下地形决定粒子群系（与 {@link #areaName()} 同一套判定）。 */
+    private WeatherParticles.Biome currentBiome() {
+        int tile = gameMap.getTile(player.getX(), player.getY());
+        return switch (tile) {
+            case GameMap.TILE_TREE -> WeatherParticles.Biome.FOREST;
+            case GameMap.TILE_WALL -> WeatherParticles.Biome.DUNGEON;
+            default -> WeatherParticles.Biome.VILLAGE;
         };
     }
 
