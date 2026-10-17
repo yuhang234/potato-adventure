@@ -124,6 +124,32 @@ public class GameEngine {
     /** 界面动画时间（LOGO 浮动等）。 */
     private double uiTime;
 
+    /**
+     * 开发者截图入口：{@code -Dpotato.capture=<png 路径>}。
+     *
+     * <p>渲染若干帧（等资源与动画稳定）后把整个画面写成 PNG 并退出。用途是把
+     * “真实运行中的游戏画面”落到文件里做验收留证：走的是完全相同的渲染路径
+     * （同一个 Canvas、同一套绘制代码），只是把结果从屏幕搬到了 PNG。
+     *
+     * <p>之所以不用 X11 抓屏：本机 DISPLAY 下 x11grab 抓到的整屏都是黑的
+     * （合成器 + GL 绘制），截图不可信；Scene 快照是同一帧像素，更可靠。
+     */
+    private final String capturePath = captureTarget();
+
+    /** 截图目标路径：{@code -Dpotato.capture=<png>} 或环境变量 {@code POTATO_CAPTURE}。 */
+    private static String captureTarget() {
+        String target = System.getProperty("potato.capture");
+        if (target == null || target.isBlank()) {
+            target = System.getenv("POTATO_CAPTURE");
+        }
+        return target;
+    }
+
+    /** 截图前先跑多少帧（60 FPS 下约 0.6 秒）。 */
+    private static final int CAPTURE_AFTER_FRAMES = 36;
+
+    private int renderedFrames;
+
     // ---- 界面状态 ----
     private int menuIndex;
     private int classIndex;
@@ -354,6 +380,7 @@ public class GameEngine {
                 update(dt);
                 UiKit.beginFrame();
                 render();
+                maybeCapture();
 
                 fpsAccumulator += dt;
                 fpsFrames++;
@@ -907,6 +934,43 @@ public class GameEngine {
     }
 
     // ------------------------------------------------------------------ 渲染
+
+    /**
+     * 截图模式：稳定若干帧后把当前画面写成 PNG 并退出。
+     * 未指定 {@code -Dpotato.capture} 时零开销。
+     */
+    private void maybeCapture() {
+        if (capturePath == null || capturePath.isBlank()) {
+            return;
+        }
+        if (++renderedFrames < CAPTURE_AFTER_FRAMES) {
+            return;
+        }
+        try {
+            javafx.scene.image.WritableImage shot = scene.snapshot(null);
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
+                    (int) shot.getWidth(), (int) shot.getHeight(),
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            javafx.scene.image.PixelReader reader = shot.getPixelReader();
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    image.setRGB(x, y, reader.getArgb(x, y));
+                }
+            }
+            java.io.File file = new java.io.File(capturePath);
+            java.io.File parent = file.getParentFile();
+            if (parent != null) {
+                parent.mkdirs();
+            }
+            javax.imageio.ImageIO.write(image, "png", file);
+            System.out.println("[capture] 已保存运行画面: " + file.getAbsolutePath()
+                    + " (" + image.getWidth() + "x" + image.getHeight() + ")");
+        } catch (Exception e) {
+            System.err.println("[capture] 截图失败: " + e);
+        } finally {
+            javafx.application.Platform.exit();
+        }
+    }
 
     private void render() {
         switch (gameState) {
