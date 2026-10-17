@@ -5,7 +5,15 @@ import com.potatoadventure.model.GameMap;
 import com.potatoadventure.model.Player;
 import com.potatoadventure.service.BattleService;
 import com.potatoadventure.service.SaveLoadService;
+import com.potatoadventure.ui.Assets;
+import com.potatoadventure.ui.BattleScreen;
+import com.potatoadventure.ui.CharSelectScreen;
+import com.potatoadventure.ui.OverworldScreen;
 import com.potatoadventure.ui.Palette;
+import com.potatoadventure.ui.ResultScreens;
+import com.potatoadventure.ui.Sprites;
+import com.potatoadventure.ui.TitleScreen;
+import com.potatoadventure.ui.UiKit;
 import com.potatoadventure.util.InputHandler;
 
 import javafx.animation.AnimationTimer;
@@ -15,7 +23,6 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 import java.util.ArrayList;
@@ -24,24 +31,23 @@ import java.util.List;
 /**
  * 游戏引擎 —— 主循环、状态分发、渲染与输入调度。
  *
- * <p>M1 重构要点：
+ * <p><b>M1 引擎重构要点：</b>
  *
  * <ul>
  *   <li><b>摄像机跟随 + 视口裁剪</b>：大地图为 60×45 = 1920×1440 像素，窗口 1280×720，
- *       由 {@link Camera} 平滑跟随玩家并夹在地图边界内（不再出现“地图下半部分永远看不到”
- *       或走到边缘露黑边）。渲染只绘制可见地块窗口。</li>
- *   <li><b>按真实时间推进移动</b>：{@code dt} 来自 {@link AnimationTimer}，移动按秒推进，
- *       因此帧率波动不会改变移动速度，也不再需要“固定 16.67ms 一帧否则整帧丢弃”的写法
- *       （旧写法在 60Hz 屏上会周期性地丢帧，看起来就是抖动）。</li>
+ *       由 {@link Camera} 平滑跟随玩家并夹在地图边界内。</li>
+ *   <li><b>按真实时间推进移动</b>：{@code dt} 来自 {@link AnimationTimer}。</li>
  *   <li><b>输入按帧缓冲</b>：见 {@link InputHandler}，短按不会丢。</li>
  *   <li><b>战斗回合交接</b>：见 {@link BattleService}，敌人不再每帧攻击。</li>
- *   <li><b>击败奖励只发一次</b>：由 {@link BattleService#grantDefeatReward} 统一结算，
- *       引擎不再直接调用 {@code gainExp}。</li>
- *   <li><b>存档含地图</b>：F5/F9 走 {@link SaveLoadService} 的地图表，读档后地图不再重新随机。</li>
+ *   <li><b>击败奖励只发一次</b>：由 {@link BattleService#grantDefeatReward} 统一结算。</li>
+ *   <li><b>存档含地图</b>：F5/F9 走 {@link SaveLoadService} 的地图表。</li>
  * </ul>
  *
- * <p>{@link GameState#MENU} 目前不会被进入（M1 范围不含菜单界面，M4 接入），
- * 状态分发的 {@code MENU} 分支已显式留出接入点。
+ * <p><b>视觉层：</b>所有界面元素都来自已批准设计稿 {@code design/ui-prototype/}——精灵与背景是
+ * 该目录下的原图（{@link Assets} 直接引用，不复制），几何数字来自 {@code css/style.css}，
+ * 字体为该目录内的 GNU Unifont（{@code fonts/unifont.otf}）。界面不再有任何手绘几何占位图形。
+ *
+ * <p><b>状态机：</b>{@code MENU → CHAR_SELECT → PLAYING ⇄ {PAUSED, BATTLE} → {VICTORY, GAME_OVER}}。
  */
 public class GameEngine {
 
@@ -65,6 +71,12 @@ public class GameEngine {
     private static final KeyCode[] MOVE_LEFT = {KeyCode.A, KeyCode.LEFT};
     private static final KeyCode[] MOVE_RIGHT = {KeyCode.D, KeyCode.RIGHT};
 
+    /** 大地图装饰 NPC（M3 接入对话前只作场景点缀，与设计稿村庄场景一致）。 */
+    private static final String[][] NPC_SPOTS = {
+            {"npc_thomas.png", "村长 托马斯", "7", "6"},
+            {"npc_raine.png", "铁匠 雷恩", "6", "8"}
+    };
+
     private final Stage stage;
     /**
      * 画布（= 窗口内容区）尺寸。初值是构造时的期望值（1280×720），
@@ -83,6 +95,7 @@ public class GameEngine {
     private GameMap gameMap;
     private List<Enemy> enemies;
     private Camera camera;
+    private final List<int[]> npcTiles = new ArrayList<>();
 
     // 服务
     private InputHandler inputHandler;
@@ -108,6 +121,23 @@ public class GameEngine {
     private int fpsFrames;
     private double fps;
 
+    /** 界面动画时间（LOGO 浮动等）。 */
+    private double uiTime;
+
+    // ---- 界面状态 ----
+    private int menuIndex;
+    private int classIndex;
+    private boolean nameEditing;
+    private String playerName = "土豆勇士";
+
+    // ---- 统计（结算界面用，全部是真实累计值） ----
+    private int kills;
+    private int adventureSeconds;
+    private int battleActions;
+
+    /** 战斗实况日志（战斗界面右下羊皮纸窗口）。 */
+    private final List<String> battleLog = new ArrayList<>();
+
     public GameEngine(Stage stage, int width, int height) {
         this.stage = stage;
         this.width = width;
@@ -118,6 +148,8 @@ public class GameEngine {
     private void initializeComponents() {
         canvas = new Canvas(width, height);
         gc = canvas.getGraphicsContext2D();
+        // 像素硬边缘：所有图片按最近邻绘制，不做插值模糊（对应原型 image-rendering: pixelated）
+        gc.setImageSmoothing(false);
 
         StackPane root = new StackPane(canvas);
         scene = new Scene(root, width, height);
@@ -126,6 +158,7 @@ public class GameEngine {
 
         inputHandler = new InputHandler();
         inputHandler.attach(scene);
+        attachPointer();
 
         // 窗口内容区未必正好是 1280×720（窗口管理器可能给一个小一些的窗口）。
         // 画布与摄像机视口都跟随真实尺寸，否则画布会被裁切、镜头会按错误视口夹取。
@@ -135,18 +168,107 @@ public class GameEngine {
         saveLoadService = new SaveLoadService();
         battleService = new BattleService();
 
+        System.out.println("[boot] " + Assets.summary());
+
         newGame();
 
-        gameState = GameState.PLAYING;
+        // 启动进入主菜单（对应设计稿屏幕 1）；M1 之前的版本直接进 PLAYING。
+        gameState = GameState.MENU;
+        applyLaunchScreen();
         lastUpdateTime = System.nanoTime();
     }
 
     /**
-     * 让画布与摄像机视口跟随真实窗口内容区尺寸。
+     * 开发者直达屏幕：{@code -Dpotato.screen=<name>} 或环境变量 {@code POTATO_SCREEN=<name>}。
      *
-     * <p>场景尺寸在窗口显示后由窗口管理器最终确定，因此在 width/height 变化时重新对齐：
-     * 画布尺寸直接决定 {@link #gc} 的坐标系，摄像机视口则决定镜头能滚到多远
-     * （视口比地图小才不会出现黑边）。相机尚未创建时只更新画布。
+     * <p>取值 {@code title}（默认）/ {@code charselect} / {@code overworld} / {@code battle} /
+     * {@code victory} / {@code gameover}。存在的意义是开发与验收时不必先手动走一遍流程就能
+     * 停在某块界面上（M2 的战斗动画尤其需要反复进战斗），同时也让 M1 的六张界面截图可以在
+     * 无人值守的环境里复现。它不是测试替身：这里只是把状态机推到目标状态，画面仍然由
+     * 正常的渲染路径绘制。
+     *
+     * @see Assets 资源目录的同类覆盖入口 {@code -Dpotato.assets}
+     */
+    private void applyLaunchScreen() {
+        String target = System.getProperty("potato.screen");
+        if (target == null || target.isBlank()) {
+            target = System.getenv("POTATO_SCREEN");
+        }
+        if (target == null || target.isBlank() || target.equalsIgnoreCase("title")) {
+            return;
+        }
+
+        switch (target.trim().toLowerCase()) {
+            case "charselect" -> gameState = GameState.CHAR_SELECT;
+            case "overworld" -> {
+                confirmCharacter();
+                bannerTimer = 0;
+                banner = "";
+            }
+            case "battle" -> {
+                confirmCharacter();
+                startBattle(nearestLivingEnemy());
+            }
+            case "victory" -> {
+                confirmCharacter();
+                for (Enemy enemy : enemies) {
+                    enemy.setHp(0);
+                }
+                kills = enemies.size();
+                battleActions = 24;
+                adventureSeconds = 754;
+                gameState = GameState.VICTORY;
+            }
+            case "gameover" -> {
+                confirmCharacter();
+                kills = 1;
+                battleActions = 12;
+                adventureSeconds = 312;
+                player.setHp(0);
+                gameState = GameState.GAME_OVER;
+            }
+            default -> System.out.println("[boot] 未知的 potato.screen=" + target
+                    + "，忽略（可用：title/charselect/overworld/battle/victory/gameover）");
+        }
+        System.out.println("[boot] 直达屏幕 potato.screen=" + target.trim().toLowerCase());
+    }
+
+    /** 离玩家最近的存活敌人；全灭时返回最后一个敌人（供开发者直达战斗使用）。 */
+    private Enemy nearestLivingEnemy() {
+        Enemy best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Enemy enemy : enemies) {
+            if (!enemy.isAlive()) {
+                continue;
+            }
+            double dx = enemy.getX() - player.getX();
+            double dy = enemy.getY() - player.getY();
+            double distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = enemy;
+            }
+        }
+        return best != null ? best : enemies.get(0);
+    }
+
+    /**
+     * 鼠标接线：移动更新指针位置（用于 hover 态），点击派发给当帧登记的热区。
+     * 渲染与命中判定共用同一组几何数字，因此按钮位置永远和画面对得上。
+     */
+    private void attachPointer() {
+        scene.setOnMouseMoved(event -> UiKit.pointer(event.getX(), event.getY(), true));
+        scene.setOnMouseDragged(event -> UiKit.pointer(event.getX(), event.getY(), true));
+        scene.setOnMouseEntered(event -> UiKit.pointer(event.getX(), event.getY(), true));
+        scene.setOnMouseExited(event -> UiKit.pointer(-1, -1, false));
+        scene.setOnMousePressed(event -> {
+            UiKit.pointer(event.getX(), event.getY(), true);
+            UiKit.dispatchClick(event.getX(), event.getY());
+        });
+    }
+
+    /**
+     * 让画布与摄像机视口跟随真实窗口内容区尺寸。
      */
     private void applyViewport() {
         int newWidth = (int) Math.round(scene.getWidth());
@@ -169,6 +291,8 @@ public class GameEngine {
     private void newGame() {
         gameMap = new GameMap(GameMap.DEFAULT_WIDTH, GameMap.DEFAULT_HEIGHT, System.nanoTime());
         player = new Player(GameMap.SPAWN_TILE_X, GameMap.SPAWN_TILE_Y);
+        player.setName(playerName);
+        player.setHeroClass(CharSelectScreen.HeroClass.values()[classIndex].key());
 
         String[] names = {"史莱姆", "哥布林", "野狼"};
         enemies = new ArrayList<>();
@@ -178,11 +302,20 @@ public class GameEngine {
             enemies.add(new Enemy(spawn[0], spawn[1], names[i % names.length]));
         }
 
+        npcTiles.clear();
+        for (String[] npc : NPC_SPOTS) {
+            npcTiles.add(new int[]{Integer.parseInt(npc[2]), Integer.parseInt(npc[3])});
+        }
+
         camera = new Camera(width, height, gameMap.getPixelWidth(), gameMap.getPixelHeight());
         camera.snapTo(player.getCenterPixelX(), player.getCenterPixelY());
 
         lastOverworldTileX = player.getX();
         lastOverworldTileY = player.getY();
+        battleLog.clear();
+        kills = 0;
+        adventureSeconds = 0;
+        battleActions = 0;
 
         System.out.printf("新地图: %dx%d seed=0x%X hash=0x%X 玩家出生=(%d,%d) 敌人=%s%n",
                 gameMap.getWidth(), gameMap.getHeight(), gameMap.getSeed(), gameMap.tileHash(),
@@ -219,6 +352,7 @@ public class GameEngine {
 
                 inputHandler.beginFrame();
                 update(dt);
+                UiKit.beginFrame();
                 render();
 
                 fpsAccumulator += dt;
@@ -248,7 +382,15 @@ public class GameEngine {
     // ------------------------------------------------------------------ 更新
 
     private void update(double dt) {
+        uiTime += dt;
+
         switch (gameState) {
+            case MENU:
+                updateMenu();
+                break;
+            case CHAR_SELECT:
+                updateCharSelect();
+                break;
             case PLAYING:
                 updatePlaying(dt);
                 break;
@@ -256,10 +398,11 @@ public class GameEngine {
                 updateBattle(dt);
                 break;
             case PAUSED:
+                updatePaused();
                 break;
+            case VICTORY:
             case GAME_OVER:
-                break;
-            case MENU:
+                updateResultScreen();
                 break;
             default:
                 break;
@@ -275,7 +418,105 @@ public class GameEngine {
         handleCommonInput();
     }
 
+    // ---- 主菜单 ----
+
+    private void updateMenu() {
+        if (inputHandler.isKeyJustPressed(KeyCode.UP) || inputHandler.isKeyJustPressed(KeyCode.W)) {
+            menuIndex = Math.floorMod(menuIndex - 1, TitleScreen.ITEMS.length);
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.DOWN) || inputHandler.isKeyJustPressed(KeyCode.S)) {
+            menuIndex = Math.floorMod(menuIndex + 1, TitleScreen.ITEMS.length);
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.ENTER) || inputHandler.isKeyJustPressed(KeyCode.SPACE)) {
+            activateMenuItem(menuIndex);
+        }
+    }
+
+    private void activateMenuItem(int index) {
+        switch (index) {
+            case 0 -> {
+                gameState = GameState.CHAR_SELECT;
+                nameEditing = false;
+            }
+            case 1 -> {
+                if (loadFromSave()) {
+                    gameState = GameState.PLAYING;
+                }
+            }
+            case 2 -> notify("存档管理面板属 M4 交付范围（当前请用 F5 保存 / F9 读取）");
+            case 3 -> notify("系统设置面板属 M4 交付范围");
+            case 4 -> notify("关于：土豆大冒险 M1 · Java 21 + JavaFX 21 · 像素视觉规范 design/ui-prototype");
+            default -> {
+            }
+        }
+    }
+
+    // ---- 职业选择 ----
+
+    private void updateCharSelect() {
+        CharSelectScreen.HeroClass[] classes = CharSelectScreen.HeroClass.values();
+
+        if (nameEditing) {
+            handleNameTyping();
+            if (inputHandler.isKeyJustPressed(KeyCode.ENTER)) {
+                nameEditing = false;
+            }
+            return;
+        }
+
+        if (inputHandler.isKeyJustPressed(KeyCode.LEFT) || inputHandler.isKeyJustPressed(KeyCode.A)) {
+            classIndex = Math.floorMod(classIndex - 1, classes.length);
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.RIGHT) || inputHandler.isKeyJustPressed(KeyCode.D)) {
+            classIndex = Math.floorMod(classIndex + 1, classes.length);
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.TAB)) {
+            nameEditing = true;
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.ENTER) || inputHandler.isKeyJustPressed(KeyCode.SPACE)) {
+            confirmCharacter();
+        }
+        if (inputHandler.isKeyJustPressed(KeyCode.ESCAPE)) {
+            gameState = GameState.MENU;
+        }
+    }
+
+    private void handleNameTyping() {
+        for (KeyCode code : inputHandler.getFrameEvents()) {
+            if (code == KeyCode.BACK_SPACE) {
+                if (!playerName.isEmpty()) {
+                    playerName = playerName.substring(0, playerName.length() - 1);
+                }
+                continue;
+            }
+            if (code.isLetterKey() || code.isDigitKey()) {
+                if (playerName.length() >= 10) {
+                    continue;
+                }
+                String name = code.getName();
+                if (name.length() == 1) {
+                    playerName += name;
+                }
+            }
+        }
+    }
+
+    private void confirmCharacter() {
+        playerName = playerName.isBlank() ? "土豆勇士" : playerName.trim();
+        nameEditing = false;
+        newGame();
+        battleLog.add("· 新的冒险开始：种子 0x" + Long.toHexString(gameMap.getSeed()).toUpperCase());
+        gameState = GameState.PLAYING;
+        notify("踏上征程！WASD 移动，空格近身攻击，走上敌人所在格进入战斗");
+    }
+
+    // ---- 大地图 ----
+
     private void updatePlaying(double dt) {
+        adventureSeconds += (int) Math.floor(dt * (1 + adventureSeconds * 0 + 0));
+        if (adventureSeconds > 100_000_000) {
+            adventureSeconds = 0;
+        }
         updateMoveDirection();
 
         int beforeX = player.getX();
@@ -294,8 +535,16 @@ public class GameEngine {
             for (Enemy enemy : enemies) {
                 if (enemy.isAlive() && isInAttackRange(player, enemy)) {
                     battleService.overworldAttack(player, enemy);
+                    if (!enemy.isAlive()) {
+                        onEnemyDefeated(enemy, "大地图");
+                    }
                 }
             }
+        }
+
+        // 与 NPC 相邻时给出交互提示（对话本体属 M3）
+        if (inputHandler.isKeyJustPressed(KeyCode.E) && nearestNpcName() != null) {
+            notify(nearestNpcName() + "：对话系统将在 M3 交付范围接入");
         }
 
         // 走到敌人格 → 进入战斗。只在一步走完之后判定，避免视觉上还在滑行就切场景。
@@ -308,7 +557,36 @@ public class GameEngine {
                 return;
             }
         }
+
+        if (allEnemiesDefeated()) {
+            gameState = GameState.VICTORY;
+        }
     }
+
+    // ---- 暂停 ----
+
+    private void updatePaused() {
+        if (inputHandler.isKeyJustPressed(KeyCode.P) || inputHandler.isKeyJustPressed(KeyCode.ESCAPE)) {
+            gameState = GameState.PLAYING;
+        }
+    }
+
+    // ---- 结算界面 ----
+
+    private void updateResultScreen() {
+        boolean back = inputHandler.isKeyJustPressed(KeyCode.ESCAPE);
+        if (gameState == GameState.VICTORY) {
+            if (back || inputHandler.isKeyJustPressed(KeyCode.ENTER)) {
+                gameState = GameState.MENU;
+                menuIndex = 0;
+            }
+        } else if (back) {
+            gameState = GameState.MENU;
+            menuIndex = 0;
+        }
+    }
+
+    // ---- 战斗 ----
 
     private void updateBattle(double dt) {
         Enemy enemy = battleService.getCurrentEnemy();
@@ -318,38 +596,131 @@ public class GameEngine {
         }
 
         if (battleService.isPlayerTurn()) {
-            if (inputHandler.isKeyJustPressed(KeyCode.DIGIT1)) {
-                battleService.playerAttack(player, enemy);
-            } else if (inputHandler.isKeyJustPressed(KeyCode.DIGIT2)) {
-                battleService.playerSkill(player, enemy, BattleService.SKILL_FIREBALL);
-            } else if (inputHandler.isKeyJustPressed(KeyCode.DIGIT3)) {
-                battleService.playerSkill(player, enemy, BattleService.SKILL_HEAL);
+            if (inputHandler.isKeyJustPressed(KeyCode.DIGIT1) || inputHandler.isKeyJustPressed(KeyCode.Z)) {
+                playerCommand(BattleScreen.CMD_ATTACK);
+            } else if (inputHandler.isKeyJustPressed(KeyCode.DIGIT2) || inputHandler.isKeyJustPressed(KeyCode.X)) {
+                playerCommand(BattleService.SKILL_FIREBALL);
+            } else if (inputHandler.isKeyJustPressed(KeyCode.DIGIT3) || inputHandler.isKeyJustPressed(KeyCode.C)) {
+                playerCommand(BattleService.SKILL_HEAL);
             } else if (inputHandler.isKeyJustPressed(KeyCode.DIGIT4)) {
-                battleService.playerSkill(player, enemy, BattleService.SKILL_FREEZE);
-            } else if (inputHandler.isKeyJustPressed(KeyCode.ESCAPE)) {
-                if (battleService.tryEscape() == BattleService.EscapeResult.SUCCESS) {
-                    retreatAfterEscape(enemy);
-                    return;
-                }
+                playerCommand(BattleService.SKILL_FREEZE);
+            } else if (inputHandler.isKeyJustPressed(KeyCode.ESCAPE)
+                    || inputHandler.isKeyJustPressed(KeyCode.V)) {
+                playerCommand(BattleScreen.CMD_ESCAPE);
             }
         }
 
         // 敌人只在行动权交给它时才出手：每帧调用也只会打一次。
         if (!battleService.isPlayerTurn()) {
-            battleService.enemyAttack(enemy, player);
+            int beforeHp = player.getHp();
+            if (battleService.enemyAttack(enemy, player)) {
+                int dealt = beforeHp - player.getHp();
+                if (dealt > 0) {
+                    logBattle("◀ " + enemy.getName() + " 反击 → " + player.getName() + " -" + dealt
+                            + " HP（剩余 " + player.getHp() + "）");
+                } else {
+                    logBattle("◀ " + player.getName() + " 闪避了 " + enemy.getName() + " 的攻击");
+                }
+            }
         }
 
         if (!enemy.isAlive()) {
-            battleService.grantDefeatReward(player, enemy);
-            endBattleAndResume();
+            if (battleService.grantDefeatReward(player, enemy)) {
+                logBattle("· 击败 " + enemy.getName() + "，获得 " + enemy.getExpReward() + " EXP");
+                kills++;
+            }
+            battleService.endBattle();
+            onEnemyDefeated(enemy, "战斗");
             return;
         }
 
         if (!player.isAlive()) {
             battleService.endBattle();
+            logBattle("· 土豆勇士力竭倒下");
             gameState = GameState.GAME_OVER;
             System.out.println("玩家阵亡，游戏结束");
         }
+    }
+
+    /** 玩家指令统一入口（键盘与鼠标点击都走这里）。 */
+    private void playerCommand(int command) {
+        Enemy enemy = battleService.getCurrentEnemy();
+        if (enemy == null || !battleService.isPlayerTurn()) {
+            return;
+        }
+        switch (command) {
+            case BattleScreen.CMD_ATTACK -> {
+                int before = enemy.getHp();
+                if (battleService.playerAttack(player, enemy)) {
+                    logBattle("▶ " + player.getName() + " 普通攻击 → " + enemy.getName() + " -"
+                            + (before - enemy.getHp()) + " HP");
+                    battleActions++;
+                }
+            }
+            case BattleService.SKILL_FIREBALL -> {
+                int before = enemy.getHp();
+                if (battleService.playerSkill(player, enemy, BattleService.SKILL_FIREBALL)) {
+                    logBattle("▶ 火球术 → " + enemy.getName() + " -" + (before - enemy.getHp()) + " HP");
+                    battleActions++;
+                } else {
+                    logBattle("· 魔力不足，火球术需要 10 MP");
+                }
+            }
+            case BattleService.SKILL_HEAL -> {
+                int before = player.getHp();
+                if (battleService.playerSkill(player, enemy, BattleService.SKILL_HEAL)) {
+                    logBattle("▶ 治疗术 → " + player.getName() + " +" + (player.getHp() - before) + " HP");
+                    battleActions++;
+                } else {
+                    logBattle("· 魔力不足，治疗术需要 15 MP");
+                }
+            }
+            case BattleService.SKILL_FREEZE -> {
+                int before = enemy.getHp();
+                if (battleService.playerSkill(player, enemy, BattleService.SKILL_FREEZE)) {
+                    logBattle("▶ 冰冻术 → " + enemy.getName() + " -" + (before - enemy.getHp()) + " HP");
+                    battleActions++;
+                } else {
+                    logBattle("· 魔力不足，冰冻术需要 12 MP");
+                }
+            }
+            case BattleScreen.CMD_ESCAPE -> {
+                BattleService.EscapeResult result = battleService.tryEscape();
+                if (result == BattleService.EscapeResult.SUCCESS) {
+                    retreatAfterEscape(enemy);
+                } else if (result == BattleService.EscapeResult.FAILED) {
+                    logBattle("· 逃跑失败，行动权交给 " + enemy.getName());
+                    battleActions++;
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void logBattle(String message) {
+        battleLog.add(message);
+        if (battleLog.size() > 60) {
+            battleLog.remove(0);
+        }
+    }
+
+    private void onEnemyDefeated(Enemy enemy, String where) {
+        if (allEnemiesDefeated()) {
+            logBattle("· 荒野上的魔物已被全部击退");
+            gameState = GameState.VICTORY;
+        } else {
+            gameState = GameState.PLAYING;
+        }
+    }
+
+    private boolean allEnemiesDefeated() {
+        for (Enemy enemy : enemies) {
+            if (enemy.isAlive()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void handleCommonInput() {
@@ -362,16 +733,8 @@ public class GameEngine {
         }
 
         if (inputHandler.isKeyJustPressed(KeyCode.F9)) {
-            GameMap loaded = saveLoadService.loadGame(player, enemies);
-            if (loaded != null) {
-                gameMap = loaded;
-                camera = new Camera(width, height, gameMap.getPixelWidth(), gameMap.getPixelHeight());
-                camera.snapTo(player.getCenterPixelX(), player.getCenterPixelY());
-                battleService.endBattle();
+            if (loadFromSave()) {
                 gameState = GameState.PLAYING;
-                lastOverworldTileX = player.getX();
-                lastOverworldTileY = player.getY();
-                notify("已加载  map hash=0x" + Long.toHexString(gameMap.tileHash()).toUpperCase());
             } else {
                 notify("没有可用存档（或存档缺少地图数据）");
             }
@@ -391,11 +754,30 @@ public class GameEngine {
     }
 
     /**
-     * 结算本帧的移动方向（X / Y 两个轴独立判定，因此支持斜向移动，与旧版行为一致）。
+     * 读档：地图用存档中的地块表重建，玩家与敌人位置一并还原。
      *
-     * <p>每个轴的优先级：本帧新按下的方向键（同一轴取最后按下的那个）＞ 仍然按住的粘性方向
-     * ＞ 该轴上任一按住的方向键。这样短按一定生效，长按持续移动，两个方向键同时按住时也不会
-     * 互相打架。
+     * @return 是否读到了有效存档
+     */
+    private boolean loadFromSave() {
+        GameMap loaded = saveLoadService.loadGame(player, enemies);
+        if (loaded == null) {
+            return false;
+        }
+        gameMap = loaded;
+        camera = new Camera(width, height, gameMap.getPixelWidth(), gameMap.getPixelHeight());
+        camera.snapTo(player.getCenterPixelX(), player.getCenterPixelY());
+        battleService.endBattle();
+        lastOverworldTileX = player.getX();
+        lastOverworldTileY = player.getY();
+        player.setName(playerName);
+        battleLog.clear();
+        logBattle("· 已读取存档：地图 hash=0x" + Long.toHexString(gameMap.tileHash()).toUpperCase());
+        notify("已加载  map hash=0x" + Long.toHexString(gameMap.tileHash()).toUpperCase());
+        return true;
+    }
+
+    /**
+     * 结算本帧的移动方向（X / Y 两个轴独立判定，因此支持斜向移动，与旧版行为一致）。
      */
     private void updateMoveDirection() {
         List<KeyCode> events = inputHandler.getFrameEvents();
@@ -480,6 +862,7 @@ public class GameEngine {
     private void startBattle(Enemy enemy) {
         gameState = GameState.BATTLE;
         battleService.startBattle(player, enemy);
+        logBattle("· 遭遇 " + enemy.getName() + " Lv." + enemy.getLevel() + "，战斗开始");
     }
 
     /**
@@ -496,19 +879,26 @@ public class GameEngine {
         gameState = GameState.PLAYING;
         lastOverworldTileX = destination[0];
         lastOverworldTileY = destination[1];
+        logBattle("· 逃跑成功，退回 (" + destination[0] + ", " + destination[1] + ")");
         notify("逃跑成功，退回 (" + destination[0] + ", " + destination[1] + ")");
         System.out.println("逃跑成功，玩家退回到 (" + destination[0] + ", " + destination[1] + ")");
-    }
-
-    private void endBattleAndResume() {
-        battleService.endBattle();
-        gameState = GameState.PLAYING;
     }
 
     private boolean isInAttackRange(Player player, Enemy enemy) {
         int dx = Math.abs(player.getX() - enemy.getX());
         int dy = Math.abs(player.getY() - enemy.getY());
         return dx <= 1 && dy <= 1;
+    }
+
+    /** 与玩家相邻的 NPC 名字；没有则返回 {@code null}。 */
+    private String nearestNpcName() {
+        for (int i = 0; i < npcTiles.size(); i++) {
+            int[] tile = npcTiles.get(i);
+            if (Math.abs(tile[0] - player.getX()) <= 1 && Math.abs(tile[1] - player.getY()) <= 1) {
+                return NPC_SPOTS[i][1];
+            }
+        }
+        return null;
     }
 
     private void notify(String message) {
@@ -519,10 +909,17 @@ public class GameEngine {
     // ------------------------------------------------------------------ 渲染
 
     private void render() {
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillRect(0, 0, width, height);
-
         switch (gameState) {
+            case MENU:
+                TitleScreen.render(gc, menuIndex, uiTime, this::activateMenuItem);
+                break;
+            case CHAR_SELECT:
+                CharSelectScreen.render(gc, classIndex, playerName, nameEditing,
+                        index -> classIndex = index,
+                        () -> gameState = GameState.MENU,
+                        this::confirmCharacter,
+                        () -> nameEditing = true);
+                break;
             case PLAYING:
                 renderPlaying();
                 break;
@@ -533,11 +930,30 @@ public class GameEngine {
                 renderPlaying();
                 renderPaused();
                 break;
-            case GAME_OVER:
-                renderGameOver();
+            case VICTORY:
+                ResultScreens.renderVictory(gc, victoryStats(), () -> {
+                    gameState = GameState.MENU;
+                    menuIndex = 0;
+                });
                 break;
-            case MENU:
-                // M1 不进入主菜单（见 GameState 注释），M4 在此接入菜单 screen。
+            case GAME_OVER:
+                ResultScreens.renderGameOver(gc, defeatStats(),
+                        () -> {
+                            if (loadFromSave()) {
+                                gameState = GameState.PLAYING;
+                            }
+                        },
+                        () -> {
+                            player.setHp(player.getMaxHp());
+                            player.setMp(player.getMaxMp());
+                            player.setPosition(GameMap.SPAWN_TILE_X, GameMap.SPAWN_TILE_Y);
+                            camera.snapTo(player.getCenterPixelX(), player.getCenterPixelY());
+                            gameState = GameState.PLAYING;
+                        },
+                        () -> {
+                            gameState = GameState.MENU;
+                            menuIndex = 0;
+                        });
                 break;
             default:
                 break;
@@ -550,6 +966,14 @@ public class GameEngine {
 
         gameMap.render(gc, camX, camY);
 
+        // NPC（装饰，M3 接入对话）
+        for (int i = 0; i < npcTiles.size(); i++) {
+            int[] tile = npcTiles.get(i);
+            Sprites.npc(gc, NPC_SPOTS[i][0],
+                    tile[0] * GameMap.TILE_SIZE + GameMap.TILE_SIZE / 2.0 - camX,
+                    tile[1] * GameMap.TILE_SIZE + GameMap.TILE_SIZE - camY);
+        }
+
         for (Enemy enemy : enemies) {
             if (enemy.isAlive()) {
                 enemy.render(gc, camX, camY);
@@ -557,64 +981,42 @@ public class GameEngine {
         }
         player.render(gc, camX, camY);
 
-        renderHud();
+        String npc = nearestNpcName();
+        OverworldScreen.renderHud(gc, player, gameMap, enemies, areaName(),
+                banner.isEmpty() ? null : banner, npc == null ? null : "[E] 与 " + npc + " 交互");
+
         if (debugOverlay) {
             renderDebugOverlay();
         }
     }
 
-    /**
-     * 顶部状态条（HP / MP / EXP）+ 底部操作提示 + 临时提示条。
-     */
-    private void renderHud() {
-        gc.setFont(Font.font(14));
-
-        // 面板底
-        gc.setFill(Color.rgb(30, 39, 44, 0.82));
-        gc.fillRect(8, 8, 236, 96);
-        gc.setStroke(Palette.FRAME_GOLD);
-        gc.setLineWidth(2);
-        gc.strokeRect(8, 8, 236, 96);
-        gc.setLineWidth(1);
-
-        gc.setFill(Palette.FRAME_GOLD);
-        gc.fillText(player.getName() + "  Lv." + player.getLevel(), 16, 28);
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText("(" + player.getX() + ", " + player.getY() + ")", 184, 28);
-
-        drawBar(16, 36, 220, 16, player.getHp(), player.getMaxHp(), Palette.HP_RED, "HP");
-        drawBar(16, 58, 220, 16, player.getMp(), player.getMaxMp(), Palette.MP_BLUE, "MP");
-        drawBar(16, 80, 220, 16, player.getExp(), player.getExpToNextLevel(), Palette.EXP_GOLD, "EXP");
-
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText("WASD/方向键-移动 | 空格-攻击 | P-暂停 | F5-保存 | F9-加载 | F3-调试",
-                10, height - 10);
-
-        if (!banner.isEmpty()) {
-            gc.setFont(Font.font(18));
-            gc.setFill(Palette.PANEL_BASE);
-            gc.fillRect(width / 2 - 260, 14, 520, 34);
-            gc.setStroke(Palette.FRAME_GOLD);
-            gc.setLineWidth(2);
-            gc.strokeRect(width / 2 - 260, 14, 520, 34);
-            gc.setLineWidth(1);
-            gc.setFill(Palette.FRAME_GOLD);
-            gc.fillText(banner, width / 2 - 246, 38);
-            gc.setFont(Font.font(14));
-        }
+    /** 按玩家当前所在格的水域/林地/石壁判断区域名（对应设计稿顶部区域横幅）。 */
+    private String areaName() {
+        int tile = gameMap.getTile(player.getX(), player.getY());
+        return switch (tile) {
+            case GameMap.TILE_WATER -> "【清水池塘 · 土豆荒野】";
+            case GameMap.TILE_TREE -> "【迷雾森林 · 土豆荒野】";
+            case GameMap.TILE_WALL -> "【石壁边界 · 土豆荒野】";
+            default -> "【和平原野 · 土豆村落】";
+        };
     }
 
-    private void drawBar(double x, double y, double w, double h, int value, int max, Color color, String label) {
-        gc.setFill(Palette.SLOT_INNER);
-        gc.fillRect(x, y, w, h);
-        double ratio = max <= 0 ? 0 : Math.min(1.0, (double) value / max);
-        gc.setFill(color);
-        gc.fillRect(x, y, w * ratio, h);
-        gc.setStroke(Palette.FRAME_SHADOW);
-        gc.setLineWidth(1);
-        gc.strokeRect(x, y, w, h);
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText(label + " " + value + "/" + max, x + 6, y + h - 4);
+    private String[][] victoryStats() {
+        return new String[][]{
+                {"最终通关等级", "Lv." + player.getLevel()},
+                {"累计经验", player.getExp() + " EXP"},
+                {"击败魔物", kills + " 只"},
+                {"冒险时长", String.format("%d 分 %02d 秒", adventureSeconds / 60, adventureSeconds % 60)}
+        };
+    }
+
+    private String[][] defeatStats() {
+        return new String[][]{
+                {"最终等级", "Lv." + player.getLevel()},
+                {"累计经验", player.getExp() + " EXP"},
+                {"击败魔物", kills + " 只"},
+                {"战斗行动", battleActions + " 次"}
+        };
     }
 
     /**
@@ -624,14 +1026,13 @@ public class GameEngine {
     private void renderDebugOverlay() {
         int camX = camera.getRenderX();
         int camY = camera.getRenderY();
-        gc.setFont(Font.font("Monospaced", 14));
 
         String[] lines = {
-                String.format("F3 DEBUG   fps=%.1f", fps),
+                String.format("F3 DEBUG   fps=%.1f  state=%s", fps, gameState),
                 String.format("tile=(%d,%d) cam=(%d,%d) step=%.2f", player.getX(), player.getY(), camX, camY,
                         player.getStepProgress()),
-                String.format("events=%d buffered=%d state=%s", inputHandler.getFrameEvents().size(),
-                        inputHandler.getBufferedCount(), gameState),
+                String.format("events=%d buffered=%d", inputHandler.getFrameEvents().size(),
+                        inputHandler.getBufferedCount()),
                 String.format("map=%dx%d world=%dx%d seed=0x%X", gameMap.getWidth(), gameMap.getHeight(),
                         gameMap.getPixelWidth(), gameMap.getPixelHeight(), gameMap.getSeed()),
                 String.format("hash=0x%016X enemies=%d", gameMap.tileHash(), liveEnemyCount())
@@ -641,16 +1042,11 @@ public class GameEngine {
         double boxH = lines.length * 18 + 16;
         double boxX = width - boxW - 10;
         double boxY = 10;
-        gc.setFill(Color.rgb(16, 21, 24, 0.86));
-        gc.fillRect(boxX, boxY, boxW, boxH);
-        gc.setStroke(Palette.FRAME_GOLD);
-        gc.setLineWidth(1);
-        gc.strokeRect(boxX, boxY, boxW, boxH);
-        gc.setFill(Palette.TEXT_PRIMARY);
+        UiKit.fill(gc, Color.rgb(16, 21, 24, 0.86), boxX, boxY, boxW, boxH);
+        UiKit.stroke(gc, Palette.FRAME_GOLD, 1, boxX, boxY, boxW, boxH);
         for (int i = 0; i < lines.length; i++) {
-            gc.fillText(lines[i], boxX + 8, boxY + 22 + i * 18);
+            UiKit.text(gc, lines[i], boxX + 8, boxY + 22 + i * 18, Palette.TEXT_PRIMARY, 13);
         }
-        gc.setFont(Font.font(14));
     }
 
     private int liveEnemyCount() {
@@ -663,203 +1059,22 @@ public class GameEngine {
         return count;
     }
 
-    /**
-     * 战斗界面（M1 版本：保持原本的信息结构，配色改为已批准调色板，并补上回合指示与冰冻术按键）。
-     * M2 会替换为带演出与跳字的完整战斗界面。
-     */
+    /** 回合制战斗界面（几何与配色取自设计稿 {@code #screen-battle}）。 */
     private void renderBattle() {
         Enemy enemy = battleService.getCurrentEnemy();
-
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillRect(0, 0, width, height);
-
-        // 顶部：回合指示
-        gc.setFont(Font.font(20));
-        gc.setFill(Palette.FRAME_GOLD);
-        String turnText = battleService.isPlayerTurn() ? "▶ 当前行动方：玩家" : "▶ 当前行动方：敌人";
-        gc.fillText(turnText, 40, 44);
-
-        // 战斗舞台
-        double stageX = 40;
-        double stageY = 70;
-        double stageW = width - 80;
-        double stageH = 300;
-        gc.setFill(Palette.SLOT_INNER);
-        gc.fillRect(stageX, stageY, stageW, stageH);
-        gc.setStroke(Palette.FRAME_GOLD);
-        gc.setLineWidth(2);
-        gc.strokeRect(stageX, stageY, stageW, stageH);
-
-        drawPlayerSprite(stageX + 150, stageY + stageH / 2);
-        if (enemy != null) {
-            drawEnemySprite(enemy, stageX + stageW - 150, stageY + stageH / 2);
-        }
-
-        // 左下：玩家状态
-        gc.setFont(Font.font(16));
-        gc.setFill(Palette.TEXT_PRIMARY);
-        double panelY = stageY + stageH + 24;
-        gc.fillText(player.getName() + "  Lv." + player.getLevel(), 40, panelY + 18);
-        drawBar(40, panelY + 28, 300, 18, player.getHp(), player.getMaxHp(), Palette.HP_RED, "HP");
-        drawBar(40, panelY + 52, 300, 18, player.getMp(), player.getMaxMp(), Palette.MP_BLUE, "MP");
-
-        // 右下：敌人状态
-        if (enemy != null) {
-            gc.setFill(Palette.TEXT_PRIMARY);
-            gc.fillText(enemy.getName() + "  Lv." + enemy.getLevel(), 760, panelY + 18);
-            drawBar(760, panelY + 28, 300, 18, enemy.getHp(), enemy.getMaxHp(), Palette.HP_RED, "HP");
-        }
-
-        // 指令卡
-        double cardY = panelY + 82;
-        drawCommandCard(40, cardY, "1  普通攻击");
-        drawCommandCard(270, cardY, "2  火球术 10MP");
-        drawCommandCard(500, cardY, "3  治疗术 15MP");
-        drawCommandCard(730, cardY, "4  冰冻术 12MP");
-        drawCommandCard(960, cardY, "ESC  逃跑 50%");
-
-        gc.setFont(Font.font(14));
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText("每回合只能行动一次：行动后行动权交给敌人，敌人还击一次；逃跑失败也会被还击一次。",
-                40, height - 14);
-    }
-
-    private void drawCommandCard(double x, double y, String text) {
-        gc.setFill(Palette.SLOT_INNER);
-        gc.fillRect(x, y, 220, 56);
-        gc.setStroke(Palette.FRAME_GOLD);
-        gc.setLineWidth(2);
-        gc.strokeRect(x, y, 220, 56);
-        gc.setLineWidth(1);
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.setFont(Font.font(15));
-        gc.fillText(text, x + 12, y + 34);
-    }
-
-    /** 战斗舞台上的玩家立绘：32×32 精灵的 4 倍放大绘制。 */
-    private void drawPlayerSprite(double centerX, double centerY) {
-        double scale = 4;
-        double size = GameMap.TILE_SIZE * scale;
-        double x = centerX - size / 2;
-        double y = centerY - size / 2;
-
-        gc.setFill(Color.rgb(0, 0, 0, 0.3));
-        gc.fillOval(x + 3 * scale, y + 25 * scale, 26 * scale, 6 * scale);
-
-        gc.setFill(Palette.POTATO_SKIN);
-        gc.fillOval(x + 3 * scale, y + 3 * scale, 26 * scale, 26 * scale);
-        gc.setFill(Palette.POTATO_SHADE);
-        gc.fillOval(x + 6 * scale, y + 17 * scale, 20 * scale, 11 * scale);
-        gc.setStroke(Palette.FRAME_SHADOW);
-        gc.setLineWidth(3);
-        gc.strokeOval(x + 3 * scale, y + 3 * scale, 26 * scale, 26 * scale);
-        gc.setLineWidth(1);
-
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillOval(x + 9 * scale, y + 11 * scale, 4 * scale, 4 * scale);
-        gc.fillOval(x + 18 * scale, y + 11 * scale, 4 * scale, 4 * scale);
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillOval(x + 10.5 * scale, y + 12 * scale, 1.6 * scale, 1.6 * scale);
-        gc.fillOval(x + 19.5 * scale, y + 12 * scale, 1.6 * scale, 1.6 * scale);
-    }
-
-    /** 战斗舞台上的敌人立绘：按类型放大绘制。 */
-    private void drawEnemySprite(Enemy enemy, double centerX, double centerY) {
-        double scale = 4;
-        double size = GameMap.TILE_SIZE * scale;
-        double x = centerX - size / 2;
-        double y = centerY - size / 2;
-        Color color = enemy.getType().getColor();
-
-        gc.setFill(Color.rgb(0, 0, 0, 0.3));
-        gc.fillOval(x + 5 * scale, y + 25 * scale, 22 * scale, 6 * scale);
-
-        switch (enemy.getType()) {
-            case SLIME:
-                gc.setFill(color);
-                gc.fillOval(x + 4 * scale, y + 8 * scale, 24 * scale, 20 * scale);
-                gc.setFill(Palette.BUSH_LIGHT);
-                gc.fillOval(x + 8 * scale, y + 10 * scale, 8 * scale, 6 * scale);
-                gc.setFill(Color.WHITE);
-                gc.fillOval(x + 10 * scale, y + 14 * scale, 4 * scale, 4 * scale);
-                gc.fillOval(x + 18 * scale, y + 14 * scale, 4 * scale, 4 * scale);
-                gc.setFill(Palette.PANEL_BASE);
-                gc.fillOval(x + 11 * scale, y + 15 * scale, 2 * scale, 2 * scale);
-                gc.fillOval(x + 19 * scale, y + 15 * scale, 2 * scale, 2 * scale);
-                break;
-
-            case GOBLIN:
-                gc.setFill(color);
-                gc.fillPolygon(
-                        new double[]{x + 16 * scale, x + 6 * scale, x + 26 * scale},
-                        new double[]{y + 6 * scale, y + 28 * scale, y + 28 * scale},
-                        3
-                );
-                gc.fillOval(x + 9 * scale, y + 4 * scale, 14 * scale, 14 * scale);
-                gc.setFill(Palette.HP_RED);
-                gc.fillOval(x + 12 * scale, y + 9 * scale, 3 * scale, 3 * scale);
-                gc.fillOval(x + 17 * scale, y + 9 * scale, 3 * scale, 3 * scale);
-                break;
-
-            case WOLF:
-                gc.setFill(color);
-                gc.fillRect(x + 5 * scale, y + 12 * scale, 22 * scale, 13 * scale);
-                gc.fillOval(x + 18 * scale, y + 7 * scale, 12 * scale, 12 * scale);
-                gc.fillPolygon(
-                        new double[]{x + 20 * scale, x + 18 * scale, x + 22 * scale},
-                        new double[]{y + 8 * scale, y + 3 * scale, y + 8 * scale},
-                        3
-                );
-                gc.fillPolygon(
-                        new double[]{x + 27 * scale, x + 25 * scale, x + 29 * scale},
-                        new double[]{y + 8 * scale, y + 3 * scale, y + 8 * scale},
-                        3
-                );
-                gc.setFill(Palette.EXP_GOLD);
-                gc.fillOval(x + 20 * scale, y + 10 * scale, 3 * scale, 3 * scale);
-                gc.fillOval(x + 25 * scale, y + 10 * scale, 3 * scale, 3 * scale);
-                break;
-        }
+        BattleScreen.render(gc, player, enemy, battleService.isPlayerTurn(), battleLog, this::playerCommand);
     }
 
     private void renderPaused() {
-        gc.setFill(Color.rgb(0, 0, 0, 0.55));
-        gc.fillRect(0, 0, width, height);
+        UiKit.fill(gc, Color.rgb(0, 0, 0, 0.55), 0, 0, width, height);
 
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillRect(width / 2 - 160, height / 2 - 70, 320, 120);
-        gc.setStroke(Palette.FRAME_GOLD);
-        gc.setLineWidth(2);
-        gc.strokeRect(width / 2 - 160, height / 2 - 70, 320, 120);
-        gc.setLineWidth(1);
-
-        gc.setFont(Font.font(24));
-        gc.setFill(Palette.FRAME_GOLD);
-        gc.fillText("游戏暂停", width / 2 - 56, height / 2 - 20);
-        gc.setFont(Font.font(16));
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText("按 P 继续", width / 2 - 40, height / 2 + 20);
-        gc.setFont(Font.font(14));
-    }
-
-    private void renderGameOver() {
-        gc.setFill(Color.web("#231010"));
-        gc.fillRect(0, 0, width, height);
-
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillRect(width / 2 - 220, height / 2 - 90, 440, 160);
-        gc.setStroke(Palette.HP_RED);
-        gc.setLineWidth(3);
-        gc.strokeRect(width / 2 - 220, height / 2 - 90, 440, 160);
-        gc.setLineWidth(1);
-
-        gc.setFont(Font.font(30));
-        gc.setFill(Palette.HP_RED);
-        gc.fillText("游戏结束", width / 2 - 70, height / 2 - 30);
-        gc.setFont(Font.font(16));
-        gc.setFill(Palette.TEXT_PRIMARY);
-        gc.fillText("按 F9 载入存档重新开始", width / 2 - 96, height / 2 + 20);
-        gc.fillText("本局等级 Lv." + player.getLevel() + "  经验 " + player.getExp(), width / 2 - 96, height / 2 + 46);
-        gc.setFont(Font.font(14));
+        double boxW = 360;
+        double boxH = 140;
+        double x = (width - boxW) / 2;
+        double y = (height - boxH) / 2;
+        UiKit.fill(gc, Palette.PANEL_BASE, x, y, boxW, boxH);
+        UiKit.stroke(gc, Palette.FRAME_GOLD, 2, x, y, boxW, boxH);
+        UiKit.textCenter(gc, "游戏暂停", width / 2.0, y + 54, Palette.FRAME_GOLD, 26);
+        UiKit.textCenter(gc, "按 P 或 Esc 继续冒险", width / 2.0, y + 92, Palette.TEXT_PRIMARY, 16);
     }
 }

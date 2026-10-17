@@ -1,6 +1,7 @@
 package com.potatoadventure.model;
 
 import com.potatoadventure.ui.Palette;
+import com.potatoadventure.ui.Sprites;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
@@ -133,72 +134,22 @@ public class Enemy {
     }
 
     /**
-     * 渲染敌人。{@code camX}/{@code camY} 是像素对齐的摄像机偏移。
+     * 渲染敌人 —— 直接贴已批准的敌怪精灵
+     * （{@code sprites/enemy_slime.png} / {@code enemy_goblin.png} / {@code enemy_wolf.png}），
+     * 头顶保留一条 3px 血条。{@code camX}/{@code camY} 是像素对齐的摄像机偏移。
      */
     public void render(GraphicsContext gc, int camX, int camY) {
         int screenX = x * GameMap.TILE_SIZE - camX;
         int screenY = y * GameMap.TILE_SIZE - camY;
-        int size = GameMap.TILE_SIZE;
 
-        // 落地阴影
-        gc.setFill(Color.rgb(0, 0, 0, 0.25));
-        gc.fillOval(screenX + 5, screenY + size - 8, size - 10, 6);
-
-        Color color = type.getColor();
-
-        switch (type) {
-            case SLIME:
-                gc.setFill(color);
-                gc.fillOval(screenX + 4, screenY + 8, size - 8, size - 12);
-                gc.setFill(Palette.BUSH_LIGHT);
-                gc.fillOval(screenX + 8, screenY + 10, 8, 6);
-                gc.setFill(Color.WHITE);
-                gc.fillOval(screenX + 10, screenY + 14, 4, 4);
-                gc.fillOval(screenX + 18, screenY + 14, 4, 4);
-                gc.setFill(Palette.PANEL_BASE);
-                gc.fillOval(screenX + 11, screenY + 15, 2, 2);
-                gc.fillOval(screenX + 19, screenY + 15, 2, 2);
-                break;
-
-            case GOBLIN:
-                gc.setFill(color);
-                gc.fillPolygon(
-                        new double[]{screenX + 16, screenX + 8, screenX + 24},
-                        new double[]{screenY + 8, screenY + 24, screenY + 24},
-                        3
-                );
-                gc.fillOval(screenX + 10, screenY + 6, 12, 12);
-                gc.setFill(Palette.HP_RED);
-                gc.fillOval(screenX + 12, screenY + 10, 3, 3);
-                gc.fillOval(screenX + 17, screenY + 10, 3, 3);
-                break;
-
-            case WOLF:
-                gc.setFill(color);
-                gc.fillRect(screenX + 6, screenY + 12, 20, 12);
-                gc.fillOval(screenX + 18, screenY + 8, 10, 10);
-                gc.fillPolygon(
-                        new double[]{screenX + 20, screenX + 18, screenX + 22},
-                        new double[]{screenY + 8, screenY + 4, screenY + 8},
-                        3
-                );
-                gc.fillPolygon(
-                        new double[]{screenX + 26, screenX + 24, screenX + 28},
-                        new double[]{screenY + 8, screenY + 4, screenY + 8},
-                        3
-                );
-                gc.setFill(Palette.EXP_GOLD);
-                gc.fillOval(screenX + 20, screenY + 10, 3, 3);
-                gc.fillOval(screenX + 24, screenY + 10, 3, 3);
-                break;
-        }
+        Sprites.enemy(gc, type, screenX + GameMap.TILE_SIZE / 2.0, screenY + GameMap.TILE_SIZE);
 
         // 血条（深色底槽 + 红色血条）
         gc.setFill(Palette.PANEL_BASE);
-        gc.fillRect(screenX, screenY - 4, size, 3);
+        gc.fillRect(screenX, screenY - 6, GameMap.TILE_SIZE, 4);
         gc.setFill(Palette.HP_RED);
         double hpPercent = (double) hp / maxHp;
-        gc.fillRect(screenX, screenY - 4, size * hpPercent, 3);
+        gc.fillRect(screenX + 1, screenY - 5, (GameMap.TILE_SIZE - 2) * hpPercent, 2);
     }
 
     // Getters and Setters

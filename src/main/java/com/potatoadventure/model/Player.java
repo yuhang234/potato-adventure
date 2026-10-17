@@ -1,9 +1,7 @@
 package com.potatoadventure.model;
 
-import com.potatoadventure.ui.Palette;
+import com.potatoadventure.ui.Sprites;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.ArcType;
 
 /**
  * 玩家角色。
@@ -45,6 +43,9 @@ public class Player {
     private int attack;
     private int defense;
     private int speed;
+
+    /** 职业外观标识，对应 {@code sprites/hero_<class>.png}；M2 起由职业选择界面写入。 */
+    private String heroClass = "berserker";
 
     public Player(int x, int y) {
         this.x = x;
@@ -273,36 +274,16 @@ public class Player {
     // ------------------------------------------------------------------ 渲染
 
     /**
-     * 绘制角色。{@code camX}/{@code camY} 是像素对齐的摄像机偏移。
+     * 绘制角色 —— 直接贴已批准的角色精灵
+     * （{@code design/ui-prototype/assets/sprites/hero_<职业>.png}），
+     * 不再用 {@code fillOval} 手绘土豆。
+     *
+     * <p>{@code camX}/{@code camY} 是像素对齐的摄像机偏移（整数，保证精灵不被半像素采样）。
      */
     public void render(GraphicsContext gc, int camX, int camY) {
-        int px = (int) Math.round(getVisualPixelX()) - camX;
-        int py = (int) Math.round(getVisualPixelY()) - camY;
-
-        // 落地阴影
-        gc.setFill(Color.rgb(0, 0, 0, 0.25));
-        gc.fillOval(px + 6, py + 25, 20, 6);
-
-        // 土豆身体
-        gc.setFill(Palette.POTATO_SKIN);
-        gc.fillOval(px + 3, py + 3, 26, 26);
-        gc.setFill(Palette.POTATO_SHADE);
-        gc.fillOval(px + 6, py + 17, 20, 11);
-        gc.setStroke(Palette.FRAME_SHADOW);
-        gc.setLineWidth(1);
-        gc.strokeOval(px + 3, py + 3, 26, 26);
-
-        // 五官
-        gc.setFill(Palette.PANEL_BASE);
-        gc.fillOval(px + 9, py + 11, 4, 4);
-        gc.fillOval(px + 18, py + 11, 4, 4);
-        gc.setStroke(Palette.PANEL_BASE);
-        gc.strokeArc(px + 11, py + 14, 10, 8, 180, 180, ArcType.OPEN);
-
-        // 木剑
-        gc.setStroke(Palette.FRAME_SHADOW);
-        gc.setLineWidth(2);
-        gc.strokeLine(px + 26, py + 12, px + 30, py + 7);
+        double centerX = getVisualPixelX() + GameMap.TILE_SIZE / 2.0 - camX;
+        double bottomY = getVisualPixelY() + GameMap.TILE_SIZE - camY;
+        Sprites.hero(gc, centerX, bottomY, heroClass);
     }
 
     // ------------------------------------------------------------------ 属性
@@ -327,6 +308,15 @@ public class Player {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    /** 职业外观标识（berserker / mage / ranger）。 */
+    public String getHeroClass() {
+        return heroClass;
+    }
+
+    public void setHeroClass(String heroClass) {
+        this.heroClass = heroClass == null || heroClass.isBlank() ? "berserker" : heroClass;
     }
 
     public int getLevel() {

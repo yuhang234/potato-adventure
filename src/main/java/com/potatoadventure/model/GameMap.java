@@ -442,12 +442,16 @@ public class GameMap {
 
     /**
      * 渲染指定地块窗口。拆出来是为了让裁剪范围可被直接测试/复用。
+     *
+     * <p>绘制顺序：草地明暗底 → 草地纹理细节 → 障碍/水面覆盖。所有随机感都来自构造期烘焙的
+     * {@link #detail}，渲染期没有任何 {@code Random}，逐帧完全一致（缺陷 5 的修正）。
      */
     public void renderRange(GraphicsContext gc, int camX, int camY, int x0, int y0, int x1, int y1) {
         if (x1 < x0 || y1 < y0) {
             return;
         }
 
+        // 第 1 遍：草地明暗底（每格一色，由 detail 稳定推出）
         for (int shade = 0; shade < 3; shade++) {
             gc.setFill(grassShade(shade));
             for (int x = x0; x <= x1; x++) {
@@ -460,8 +464,7 @@ public class GameMap {
             }
         }
 
-        // 第 2 遍：草叶细节（位置由构造期烘焙的 detail 决定，逐帧完全一致）
-        gc.setFill(Palette.GRASS_BLADE);
+        // 第 2 遍：草地纹理（暗色土斑 + 亮色草叶），位置由构造期烘焙的 detail 决定
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
                 if (tiles[x][y] != TILE_GRASS) {
@@ -470,6 +473,14 @@ public class GameMap {
                 int px = x * TILE_SIZE - camX;
                 int py = y * TILE_SIZE - camY;
                 int d = detail[x][y];
+
+                gc.setFill(Palette.GRASS_DARK);
+                for (int i = 0; i < 2; i++) {
+                    int bits = (d >>> (1 + i * 7)) & 0x7F;
+                    gc.fillRect(px + 2 + bits % 28, py + 3 + (bits / 28) % 27, 2, 1);
+                }
+
+                gc.setFill(Palette.GRASS_BLADE);
                 for (int i = 0; i < 3; i++) {
                     int bits = (d >>> (2 + i * 10)) & 0x3FF;
                     int bx = 3 + (bits % 26);
@@ -507,43 +518,82 @@ public class GameMap {
         return Math.floorMod(detailBits, 3);
     }
 
+    /**
+     * 覆盖地块的像素画：全部用整数矩形堆叠，不使用椭圆/圆弧，保证硬边缘（不糊边）。
+     * 裂纹、砖缝错位、水波相位同样只读取构造期的 detail。
+     */
     private void renderOverlayTile(GraphicsContext gc, int tile, int px, int py, int detailBits) {
         switch (tile) {
-            case TILE_WALL:
-                // 地牢石壁：底槽 + 左上受光倒角 + 右下暗缝 + 一道随机裂纹
+            case TILE_WALL: {
+                // 石砖墙：底槽 + 交错砖缝 + 左上受光倒角 + 右下暗缝
                 gc.setFill(Palette.STONE);
                 gc.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+                gc.setFill(Palette.STONE_DARK);
+                gc.fillRect(px, py + 10, TILE_SIZE, 2);
+                gc.fillRect(px, py + 21, TILE_SIZE, 2);
+                int offsetA = (detailBits >>> 3) & 7;
+                gc.fillRect(px + 8 + offsetA, py, 2, 10);
+                gc.fillRect(px + (offsetA + 14) % 26, py + 12, 2, 9);
+                gc.fillRect(px + 8 + offsetA, py + 23, 2, 9);
+
                 gc.setFill(Palette.STONE_LIGHT);
                 gc.fillRect(px, py, TILE_SIZE, 2);
                 gc.fillRect(px, py, 2, TILE_SIZE);
                 gc.setFill(Palette.STONE_DARK);
                 gc.fillRect(px, py + TILE_SIZE - 2, TILE_SIZE, 2);
                 gc.fillRect(px + TILE_SIZE - 2, py, 2, TILE_SIZE);
-                gc.fillRect(px + 2 + ((detailBits >>> 3) & 3), py + 6, 1, 8 + ((detailBits >>> 5) & 7));
                 break;
+            }
 
-            case TILE_TREE:
-                // 树：树干 + 双层树冠（受光面在左上）
+            case TILE_TREE: {
+                // 松树：树干 + 三层塔状树冠（受光面在左上，底部压暗）
                 gc.setFill(Palette.TRUNK);
-                gc.fillRect(px + 13, py + 17, 7, 12);
+                gc.fillRect(px + 13, py + 17, 7, 14);
                 gc.setFill(Palette.TRUNK_DARK);
-                gc.fillRect(px + 18, py + 17, 2, 12);
-                gc.setFill(Palette.BUSH);
-                gc.fillOval(px + 2, py + 3, 28, 24);
-                gc.setFill(Palette.BUSH_LIGHT);
-                gc.fillOval(px + 6, py + 5, 13, 10);
-                break;
+                gc.fillRect(px + 18, py + 17, 2, 14);
 
-            case TILE_WATER:
-                // 水面：水体 + 亮边 + 两道波光（相位由 detail 决定，静止不闪）
+                gc.setFill(Palette.BUSH);
+                gc.fillRect(px + 8, py + 2, 16, 6);
+                gc.fillRect(px + 4, py + 7, 24, 7);
+                gc.fillRect(px + 7, py + 13, 18, 6);
+
+                gc.setFill(Palette.BUSH_LIGHT);
+                gc.fillRect(px + 10, py + 3, 7, 3);
+                gc.fillRect(px + 6, py + 8, 8, 3);
+                gc.fillRect(px + 9, py + 14, 5, 2);
+
+                Color bushDark = Palette.BUSH.interpolate(Palette.STONE_DARK, 0.45);
+                gc.setFill(bushDark);
+                gc.fillRect(px + 4, py + 14, 24, 1);
+                gc.fillRect(px + 21, py + 8, 7, 2);
+                gc.fillRect(px + 7, py + 18, 18, 2);
+                break;
+            }
+
+            case TILE_WATER: {
+                // 池塘：水体 + 梯级亮边 + 相位稳定的波光
                 gc.setFill(Palette.WATER);
                 gc.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+                Color deep = Palette.WATER.interpolate(Palette.STONE_DARK, 0.35);
+                Color ripple = Palette.WATER.interpolate(Color.WHITE, 0.35);
+                int phase = (detailBits >>> 4) & 7;
+
+                gc.setFill(deep);
+                gc.fillRect(px, py + TILE_SIZE - 3, TILE_SIZE, 3);
+
+                gc.setFill(ripple);
+                gc.fillRect(px + 3, py + 5 + phase, 11, 1);
+                gc.fillRect(px + 18, py + 13 + (phase / 2), 8, 1);
+                gc.fillRect(px + 6, py + 22 - (phase / 2), 13, 1);
+                gc.fillRect(px + 24, py + 3 + phase, 4, 1);
+
                 gc.setFill(Palette.WATER_LIGHT);
-                gc.fillRect(px, py + 2 + ((detailBits >>> 4) & 7), TILE_SIZE, 1);
-                gc.setStroke(Palette.WATER_LIGHT);
-                gc.setLineWidth(1);
-                gc.strokeOval(px + 4, py + 12 + ((detailBits >>> 7) & 3), 18, 9);
+                gc.fillRect(px + 5, py + 5 + phase, 3, 1);
+                gc.fillRect(px + 20, py + 13 + (phase / 2), 2, 1);
                 break;
+            }
 
             default:
                 gc.setFill(Color.BLACK);
