@@ -4,7 +4,7 @@
 
 《土豆冒险》是一款基于 **Java 21 + OpenJFX 21** 开发的 2D 冒险游戏，实现了核心玩法包括：角色移动、地图探索、碰撞检测、战斗系统和存档功能。游戏采用纯代码生成图形资源，无需外部资源文件，开箱即用。
 
-> **v2.0.0-M1（本版本）** 完成“基础底座与引擎重构”：升级到 Java 21 + OpenJFX 21（JavaFX 由 Maven 依赖提供，任意标准 JDK 21 均可运行）、加入平滑滚屏摄像机与视口裁剪、地图扩展到 60×45、修复 6 个已复现缺陷。详见 [`Docs/M1_引擎重构说明.md`](Docs/M1_引擎重构说明.md)。
+> **v2.0.0-M1（本版本）** 完成“基础底座与引擎重构”：升级到 Java 21 + OpenJFX 21（JavaFX 由 Maven 依赖提供，任意标准 JDK 21 均可运行）、加入平滑滚屏摄像机与视口裁剪、地图扩展到 60×45、修复 6 个已复现缺陷。
 
 ### 核心特性
 
@@ -313,8 +313,7 @@ potatoadven/
 ├── run.sh / run.bat                        # 一键启动脚本（自动定位 JDK 21）
 ├── .gitignore                              # Git忽略文件
 ├── Docs/
-│   ├── 需求文档.md                         # 完整需求文档
-│   └── M1_引擎重构说明.md                  # M1 改动、缺陷根因与验证记录
+│   └── 需求文档.md                         # 完整需求文档
 ├── src/
 │   ├── main/
 │   │   └── java/
@@ -323,7 +322,7 @@ potatoadven/
 │   │               ├── Main.java           # 主程序入口
 │   │               ├── core/
 │   │               │   ├── GameEngine.java    # 游戏引擎（核心循环、状态机、HUD）
-│   │               │   ├── GameState.java     # 游戏状态枚举（含 MENU 占位说明）
+│   │               │   ├── GameState.java     # 游戏状态枚举（状态机）
 │   │               │   ├── Camera.java        # 平滑滚屏摄像机
 │   │               │   └── RetreatPlanner.java# 逃跑落点计算
 │   │               ├── model/
@@ -334,11 +333,20 @@ potatoadven/
 │   │               │   ├── BattleService.java      # 战斗服务（回合制）
 │   │               │   └── SaveLoadService.java    # 存档服务（含地图表）
 │   │               ├── ui/
-│   │               │   └── Palette.java    # 获批配色常量（单一来源）
+│   │               │   ├── Palette.java          # 获批配色常量（单一来源）
+│   │               │   ├── UiKit.java            # 像素 UI 工具箱（面板/按钮/血条）
+│   │               │   ├── Assets.java           # 已批准像素美术统一加载入口
+│   │               │   ├── Sprites.java          # 实体精灵贴图绘制
+│   │               │   ├── TitleScreen.java      # 主菜单
+│   │               │   ├── CharSelectScreen.java # 职业与角色创建
+│   │               │   ├── OverworldScreen.java  # 大地图 HUD
+│   │               │   ├── BattleScreen.java     # 回合制战斗
+│   │               │   ├── ResultScreens.java    # 通关/战败结算
+│   │               │   └── WeatherParticles.java # 环境粒子层
 │   │               └── util/
 │   │                   └── InputHandler.java       # 输入处理（有序缓冲）
 │   └── test/
-│       └── java/com/potatoadventure/       # JUnit 5 单元测试（67 个用例）
+│       └── java/com/potatoadventure/       # JUnit 5 单元测试（68 个用例）
 │           ├── core/     CameraTest / RetreatPlannerTest
 │           ├── model/    GameMapTest / PlayerMovementTest
 │           ├── service/  BattleServiceTest / SaveLoadServiceTest
@@ -435,7 +443,7 @@ mvn install
 - **UI框架**: OpenJFX 21（`javafx-controls` / `javafx-graphics` / `javafx-media` 21.0.2，Maven Central）
 - **数据库**: SQLite 3.45.1（xerial `sqlite-jdbc`）
 - **日志**: SLF4J 2.0.12（api + simple）
-- **测试**: JUnit 5（Jupiter）5.10.2，共 67 个用例
+- **测试**: JUnit 5（Jupiter）5.10.2，共 68 个用例
 - **构建工具**: Apache Maven (compiler 3.13.0 / surefire 3.2.5 / javafx-maven-plugin 0.0.8)
 
 ---
@@ -492,8 +500,8 @@ mvn install
 - 🐞 修复 6 个缺陷：敌人每帧攻击、无法逃离战斗、单次击杀双倍经验、存档不保存地图、草地纹理逐帧闪烁、快速按键丢失
 - 💾 存档新增地图表（`map_meta` / `map_tile`），读档保证地图与位置完全一致；旧格式存档明确拒绝
 - ⌨️ 输入改为有序缓冲，支持按住连走、斜向移动，按键零丢失
-- 🧪 新增 67 个 JUnit 5 单元测试覆盖上述改动
-- 📄 新增 `Docs/M1_引擎重构说明.md`；`run.sh` / `run.bat` 自动定位 JDK 21
+- 🧪 新增 68 个 JUnit 5 单元测试覆盖上述改动
+- 📄 `run.sh` / `run.bat` 自动定位 JDK 21
 
 ### v1.0.0 (2026-01-31)
 
