@@ -30,6 +30,37 @@ public final class OverworldScreen {
 
     private static final double MINIMAP_SIZE = 150;
 
+    /**
+     * 生物群系快捷选择栏（对应原型 {@code .hud-biome-switcher}：{@code top:125; left:15; gap:6}，
+     * 按钮 {@code 12px} 字 + {@code 4px 10px} 内边距 + 2px 边框 → 72×25）。
+     *
+     * <p>M1 的地图只有一张 60×45 程序化地图，没有“切群系”玩法，所以这三个按钮只做
+     * 视觉呈现（与原型一致的高亮态），不接受点击——点击后会让人以为能换地图。
+     */
+    private static final String[] BIOMES = {"平原村庄", "迷雾森林", "暗黑地牢"};
+    private static final double BIOME_X = 15;
+    private static final double BIOME_Y = 125;
+    private static final double BIOME_W = 72;
+    private static final double BIOME_H = 25;
+    private static final double BIOME_GAP = 6;
+
+    /** 委托面板（对应原型 {@code .hud-quest-panel}：{@code bottom:20; left:15; width:270}）。 */
+    private static final double QUEST_W = 270;
+    private static final double QUEST_HEADER_H = 26;
+    private static final double QUEST_CONTENT_H = 82;
+
+    /**
+     * 委托文案：与原型 {@code #hud-quest-panel} 完全一致的三行。
+     *
+     * <p><b>目前是纯展示</b>：M1 没有任务系统，这三行不绑定任何真实进度；
+     * 等 M3 做任务系统时再换成真实数据源（届时这里应改为从任务模型读取）。
+     */
+    private static final String[] QUEST_LINES = {
+            "• 讨伐迷雾史莱姆 (2/3)",
+            "• 与村长托马斯对话商讨对策",
+            "• 探访铁匠雷恩打磨阔剑"
+    };
+
     private OverworldScreen() {
     }
 
@@ -54,13 +85,44 @@ public final class OverworldScreen {
     public static void renderHud(GraphicsContext gc, Player player, GameMap map, List<Enemy> enemies,
                                  String areaName, String banner, String interactPrompt) {
         drawStatusFrame(gc, player);
+        drawBiomeSwitcher(gc, areaName);
         drawBanner(gc, banner == null || banner.isEmpty() ? areaName : banner,
                 banner != null && !banner.isEmpty());
         drawMinimap(gc, player, map, enemies);
-        drawHintPanel(gc);
+        drawQuestPanel(gc);
         drawHotbar(gc, enemies);
         if (interactPrompt != null) {
             drawInteractPrompt(gc, interactPrompt);
+        }
+    }
+
+    // ---------------------------------------------------------------- 群系切换栏
+
+    /**
+     * 三枚群系按钮；高亮态按区域名关键字推断（找不到关键字时高亮第一枚，与原型默认一致）。
+     */
+    private static void drawBiomeSwitcher(GraphicsContext gc, String areaName) {
+        int active = 0;
+        if (areaName != null) {
+            if (areaName.contains("森林") || areaName.contains("迷雾")) {
+                active = 1;
+            } else if (areaName.contains("地牢") || areaName.contains("暗黑")) {
+                active = 2;
+            }
+        }
+
+        for (int i = 0; i < BIOMES.length; i++) {
+            double bx = BIOME_X + i * (BIOME_W + BIOME_GAP);
+            boolean on = i == active;
+
+            // .hud-biome-btn：rgba(26,34,42,.9) 底 + 2px #788796 边；active/hover 为
+            // rgba(45,58,71,.95) 底 + #FFD264 边与字
+            UiKit.fill(gc, on ? Color.rgb(45, 58, 71, 0.95) : Color.rgb(26, 34, 42, 0.9),
+                    bx, BIOME_Y, BIOME_W, BIOME_H);
+            UiKit.stroke(gc, on ? Color.web("#FFD264") : Color.web("#788796"), 2,
+                    bx, BIOME_Y, BIOME_W, BIOME_H);
+            UiKit.textCenter(gc, BIOMES[i], bx + BIOME_W / 2.0, BIOME_Y + 17,
+                    on ? Color.web("#FFD264") : Color.web("#D6E0EA"), 12);
         }
     }
 
@@ -119,16 +181,24 @@ public final class OverworldScreen {
 
     // ---------------------------------------------------------------- 横幅
 
+    /**
+     * 顶部区域横幅：{@code top:20} 居中，{@code padding:6px 24px} + 2px 金边 + 16px 粗体，
+     * 因此高度固定 32px（量得 20..51），宽度随文案长度变化。
+     */
     private static void drawBanner(GraphicsContext gc, String text, boolean highlight) {
-        double textW = text.length() * 16.0;
-        double w = Math.max(220, textW + 48);
-        double x = (Assets.DESIGN_WIDTH - w) / 2;
+        double textW = 0;
+        for (int i = 0; i < text.length(); i++) {
+            // Unifont 等宽：中文/全角 1em，ASCII 半角
+            textW += text.charAt(i) < 0x2000 ? 8 : 16;
+        }
+        double w = Math.max(200, textW + 48 + 4);
+        double x = Math.floor((Assets.DESIGN_WIDTH - w) / 2);
         double y = 20;
-        double h = 34;
+        double h = 32;
 
         UiKit.fill(gc, Color.rgb(18, 24, 30, 0.88), x, y, w, h);
         UiKit.stroke(gc, highlight ? Color.web("#FFD264") : Color.web("#D6A848"), 2, x, y, w, h);
-        UiKit.textCenter(gc, text, Assets.DESIGN_WIDTH / 2.0, UiKit.baseline(y, h, 16),
+        UiKit.textCenter(gc, text, x + w / 2.0, y + 21,
                 highlight ? Color.web("#FFFDE6") : Color.web("#FFD264"), 16);
     }
 
@@ -196,26 +266,35 @@ public final class OverworldScreen {
         UiKit.stroke(gc, Color.web("#8FA0AD"), 1, x + 3, y + 3, size - 6, size - 6);
     }
 
-    // ---------------------------------------------------------------- 提示面板
+    // ---------------------------------------------------------------- 委托面板
 
-    private static void drawHintPanel(GraphicsContext gc) {
+    /**
+     * 左下委托面板：头部 26px（{@code #2C3A47} 底 + 14px 金字 + 右侧 11px 折叠提示），
+     * 内容区 82px（10px 上下内边距 + 3 行 13px、行高 20.8 → 基线间距 21）。
+     *
+     * <p>面板总高 2+26+82+2 = 112，与原型截图量得的 588..699 完全对齐。
+     */
+    private static void drawQuestPanel(GraphicsContext gc) {
         double x = 15;
-        double w = 270;
-        double h = 108;
+        double w = QUEST_W;
+        double h = QUEST_HEADER_H + QUEST_CONTENT_H + 4;
         double y = Assets.DESIGN_HEIGHT - 20 - h;
 
         UiKit.fill(gc, Color.rgb(22, 28, 36, 0.92), x, y, w, h);
         UiKit.stroke(gc, Color.web("#4A5C6D"), 2, x, y, w, h);
 
-        UiKit.fill(gc, Color.web("#2C3A47"), x + 2, y + 2, w - 4, 28);
-        UiKit.text(gc, "操作提示 (Q)", x + 12, y + 2 + 20, Color.web("#FFD264"), 14);
-        UiKit.text(gc, "[折叠/展开]", x + w - 82, y + 2 + 20, Color.web("#A0B0C0"), 11);
+        UiKit.fill(gc, Color.web("#2C3A47"), x + 2, y + 2, w - 4, QUEST_HEADER_H);
+        UiKit.text(gc, "当前委托 (Q)", x + 12, y + 2 + 17, Color.web("#FFD264"), 14);
 
-        double line = y + 46;
-        UiKit.text(gc, "• WASD / 方向键 移动，空格 近身攻击", x + 12, line, Color.web("#CAD5E0"), 13);
-        UiKit.text(gc, "• 走上敌人所在格 进入回合制战斗", x + 12, line + 20, Color.web("#CAD5E0"), 13);
-        UiKit.text(gc, "• F5 保存 / F9 读取 / P 暂停 / F3 调试", x + 12, line + 40,
-                Color.web("#CAD5E0"), 13);
+        String fold = "[折叠/展开]";
+        UiKit.text(gc, fold, x + w - 14 - fold.length() * 6, y + 2 + 17,
+                Color.web("#D6E0EA"), 11);
+
+        double lineY = y + 2 + QUEST_HEADER_H + 10 + 16;
+        for (String line : QUEST_LINES) {
+            UiKit.text(gc, line, x + 12, lineY, Color.web("#CAD5E0"), 13);
+            lineY += 21;
+        }
     }
 
     // ---------------------------------------------------------------- 快捷栏
